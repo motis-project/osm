@@ -11,6 +11,7 @@
 #include "utl/verify.h"
 
 #include "osm/tags.h"
+#include "osm/mp_manager.h"
 
 namespace osm {
 
