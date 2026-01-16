@@ -1,5 +1,7 @@
 #pragma once
 
+#include <optional>
+
 #include "osm/decoder.h"
 
 namespace osm {
@@ -15,11 +17,12 @@ struct area {
   void reset() {}
 };
 
-inline bool is_area(auto&& tags) {
-  return true;
-}
+inline bool is_area(auto&& tags) { return true; }
 
-void save_ways(multi_polygons& mp, std::int64_t const id, auto&& members, auto&& tags) {
+void save_ways(multi_polygons& mp,
+               std::int64_t const id,
+               auto&& members,
+               auto&& tags) {
   if (!is_area(tags)) {
     return;
   }
@@ -31,13 +34,16 @@ void save_ways(multi_polygons& mp, std::int64_t const id, auto&& members, auto&&
   }
 }
 
-void assemble_area(multi_polygons& mp, std::int64_t const id, auto&& members, auto&& tags, area& a) {
+std::optional<area> assemble_area(multi_polygons& mp,
+                                  std::int64_t const id,
+                                  auto&& members,
+                                  auto&& tags) {
   if (!is_area(tags)) {
-    return;
+    return {};
   }
 
-  a.reset();
   // ... build area (assembler code from libosmium)
+  return area{};
 }
 
-}  //
+}  // namespace osm
