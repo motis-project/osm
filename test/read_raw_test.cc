@@ -1,14 +1,17 @@
-#include "osm/osm.h"
+#include <chrono>
+#include <ranges>
+#include <string_view>
 
 #include "fmt/ranges.h"
-
 #include "gtest/gtest.h"
-
 #include "utl/progress_tracker.h"
 
 #include "osm/decoder.h"
+#include "osm/filing/tmp_file.h"
+#include "osm/hnidx/hybrid_node_index.h"
 #include "osm/inflate.h"
 #include "osm/memory.h"
+#include "osm/osm.h"
 
 #include "boost/fiber/all.hpp"
 
@@ -52,9 +55,9 @@ TEST(osm, varint) {
   EXPECT_EQ(it, v.end());
 }
 
-TEST(a, b) {
+TEST(osm, read_raw_test) {
   auto r = osm::raw_reader{
-      .file_ = cista::mmap{"/home/felix/Downloads/germany-latest.osm.pbf",
+      .file_ = cista::mmap{"/home/tmir/OSM/berlin-251113.osm.pbf",
                            cista::mmap::protection::READ}};
 
   auto bars = utl::global_progress_bars{false};
@@ -125,6 +128,6 @@ TEST(a, b) {
   std::cout << "number of ways: " << n_ways << "\n";
   std::cout << "number of relations: " << n_rels << "\n";
 
-  const osmium::MemoryUsage memory;
+  const ium::MemoryUsage memory;
   std::cout << "\nMemory used: " << memory.peak() << " MBytes\n";
 }

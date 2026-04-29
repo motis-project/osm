@@ -18,6 +18,8 @@ struct inflate {
     utl::verify(ec == Z_OK, "inflate init failed: {}", ec);
   }
 
+  ~inflate() { inflateEnd(&z_); }
+
   void decompress(std::string_view in, std::string& out) {
     z_.next_in = const_cast<unsigned char*>(
         reinterpret_cast<unsigned char const*>(in.data()));

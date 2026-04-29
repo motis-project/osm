@@ -112,4 +112,6 @@ enum class relation : protozero::pbf_tag_type {
   packed_MemberType_types = 10
 };
 
+enum class area : protozero::pbf_tag_type {};
+
 }  // namespace osm

@@ -12,14 +12,13 @@
 #include "utl/zip.h"
 
 #include "osm/tags.h"
+#include "osm/types.h"
 #include "osm/varint.h"
 
 namespace osm {
 
 constexpr auto const kMaxStringLength = 256U * 4U;
 constexpr auto const kNanoDegree = 1'000'000'000.0;
-
-enum member_type : std::uint32_t { kNode, kWay, kRelation };
 
 struct meta_data {
   geo::latlng to_latlng(std::int64_t const lat, std::int64_t const lon) const {
@@ -32,8 +31,8 @@ struct meta_data {
   std::int64_t lon_offset_;
 };
 
-void decode_string_table(std::string_view s,
-                         std::vector<std::string_view>& strings) {
+inline void decode_string_table(std::string_view s,
+                                std::vector<std::string_view>& strings) {
   auto pbf_string_table = protozero::pbf_message<string_table>{s};
   while (pbf_string_table.next(string_table::repeated_bytes_s,
                                protozero::pbf_wire_type::length_delimited)) {
@@ -43,7 +42,7 @@ void decode_string_table(std::string_view s,
   }
 }
 
-meta_data decode_primitive_block_metadata(
+inline meta_data decode_primitive_block_metadata(
     std::string_view s, std::vector<std::string_view>& strings) {
   auto m = meta_data{};
   auto pbf_primitive_block = protozero::pbf_message<primitive_block>{s};
@@ -278,9 +277,11 @@ void decode_relation(std::string_view s,
       zip(keys, values) | transform([&](auto&& x) {
         return std::tuple{strings.at(get<0>(x)), strings.at(get<1>(x))};
       });
+  std::int64_t ref = 0;
   auto const members =
       zip(refs, roles, types) | transform([&](auto&& x) {
-        auto const [ref, role, type] = x;
+        auto const [delta, role, type] = x;
+        ref += delta;
         return std::tuple{ref, strings.at(role), member_type{type}};
       });
   f(id, members, tags);
