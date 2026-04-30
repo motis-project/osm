@@ -18,28 +18,30 @@ struct varint {
     using pointer = std::int64_t*;
     using reference = std::int64_t const&;
 
+    enum class state : std::uint8_t { kFirst, kMid, kLast, kFin };
+
     iterator() = default;
     explicit iterator(std::string_view d)
-        : data_(d), state_{d.empty() ? kFin : kFirst} {}
+        : data_(d), state_{d.empty() ? state::kFin : state::kFirst} {}
 
     reference operator*() const {
-      if (state_ == kFirst) {
+      if (state_ == state::kFirst) {
         ++(*const_cast<iterator*>(this));
       }
       return value_;
     }
 
     iterator& operator++() {
-      if (state_ == kLast) {
-        state_ = kFin;
+      if (state_ == state::kLast) {
+        state_ = state::kFin;
         return *this;
       }
       if (data_.empty()) {
-        state_ = kLast;
+        state_ = state::kLast;
         return *this;
       }
-      if (state_ == kFirst) {
-        state_ = kMid;
+      if (state_ == state::kFirst) {
+        state_ = state::kMid;
       }
       auto start = data_.data();
       auto const end = start + data_.size();
@@ -60,7 +62,7 @@ struct varint {
       }
       data_ = {start, end};
       if (data_.empty()) {
-        state_ = kLast;
+        state_ = state::kLast;
       }
       return *this;
     }
@@ -81,7 +83,7 @@ struct varint {
 
     std::string_view data_{};
     value_type value_{0U};
-    enum : std::uint8_t { kFirst, kMid, kLast, kFin } state_{kFin};
+    state state_{state::kFin};
   };
 
   iterator begin() const { return iterator{data_}; }

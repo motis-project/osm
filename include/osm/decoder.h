@@ -12,14 +12,13 @@
 #include "utl/zip.h"
 
 #include "osm/tags.h"
+#include "osm/types.h"
 #include "osm/varint.h"
 
 namespace osm {
 
 constexpr auto const kMaxStringLength = 256U * 4U;
 constexpr auto const kNanoDegree = 1'000'000'000.0;
-
-enum member_type : std::uint32_t { kNode, kWay, kRelation };
 
 struct meta_data {
   geo::latlng to_latlng(std::int64_t const lat, std::int64_t const lon) const {
@@ -34,10 +33,10 @@ struct meta_data {
 
 void decode_string_table(std::string_view s,
                          std::vector<std::string_view>& strings) {
-  auto pbf_string_table = protozero::pbf_message<string_table>{s};
-  while (pbf_string_table.next(string_table::repeated_bytes_s,
+  auto pbf_string_table = protozero::pbf_message<tag::string_table>{s};
+  while (pbf_string_table.next(tag::string_table::kRepeatedBytesS,
                                protozero::pbf_wire_type::length_delimited)) {
-    const auto str_view = pbf_string_table.get_view();
+    auto const str_view = pbf_string_table.get_view();
     utl_verify(str_view.length() < kMaxStringLength, "bad string {}", str_view);
     strings.emplace_back(str_view);
   }
@@ -46,26 +45,26 @@ void decode_string_table(std::string_view s,
 meta_data decode_primitive_block_metadata(
     std::string_view s, std::vector<std::string_view>& strings) {
   auto m = meta_data{};
-  auto pbf_primitive_block = protozero::pbf_message<primitive_block>{s};
+  auto pbf_primitive_block = protozero::pbf_message<tag::primitive_block>{s};
   while (pbf_primitive_block.next()) {
     switch (pbf_primitive_block.tag_and_type()) {
       case protozero::tag_and_type(
-          primitive_block::required_StringTable_stringtable,
+          tag::primitive_block::kRequiredStringTableStringtable,
           protozero::pbf_wire_type::length_delimited):
         decode_string_table(pbf_primitive_block.get_view(), strings);
         break;
 
-      case protozero::tag_and_type(primitive_block::optional_int32_granularity,
+      case protozero::tag_and_type(tag::primitive_block::kOptionalInt32Granularity,
                                    protozero::pbf_wire_type::varint):
         m.granularity_ = pbf_primitive_block.get_int32();
         break;
 
-      case protozero::tag_and_type(primitive_block::optional_int64_lat_offset,
+      case protozero::tag_and_type(tag::primitive_block::kOptionalInt64LatOffset,
                                    protozero::pbf_wire_type::varint):
         m.lat_offset_ = pbf_primitive_block.get_int64();
         break;
 
-      case protozero::tag_and_type(primitive_block::optional_int64_lon_offset,
+      case protozero::tag_and_type(tag::primitive_block::kOptionalInt64LonOffset,
                                    protozero::pbf_wire_type::varint):
         m.lon_offset_ = pbf_primitive_block.get_int64();
         break;
@@ -86,25 +85,25 @@ void decode_dense_nodes(std::string_view s,
   auto lons = delta_varint<std::int64_t>{};
   auto tags = std::string_view{};
 
-  auto pbf_dense_nodes = protozero::pbf_message<dense_nodes>{s};
+  auto pbf_dense_nodes = protozero::pbf_message<tag::dense_nodes>{s};
   while (pbf_dense_nodes.next()) {
     switch (pbf_dense_nodes.tag_and_type()) {
-      case protozero::tag_and_type(dense_nodes::packed_sint64_id,
+      case protozero::tag_and_type(tag::dense_nodes::kPackedSint64Id,
                                    protozero::pbf_wire_type::length_delimited):
         ids = {pbf_dense_nodes.get_view()};
         break;
 
-      case protozero::tag_and_type(dense_nodes::packed_sint64_lat,
+      case protozero::tag_and_type(tag::dense_nodes::kPackedSint64Lat,
                                    protozero::pbf_wire_type::length_delimited):
         lats = {pbf_dense_nodes.get_view()};
         break;
 
-      case protozero::tag_and_type(dense_nodes::packed_sint64_lon,
+      case protozero::tag_and_type(tag::dense_nodes::kPackedSint64Lon,
                                    protozero::pbf_wire_type::length_delimited):
         lons = {pbf_dense_nodes.get_view()};
         break;
 
-      case protozero::tag_and_type(dense_nodes::packed_int32_keys_vals,
+      case protozero::tag_and_type(tag::dense_nodes::kPackedInt32KeysVals,
                                    protozero::pbf_wire_type::length_delimited):
         tags = pbf_dense_nodes.get_view();
         break;
@@ -141,30 +140,30 @@ void decode_node(std::string_view s,
   auto lon = std::numeric_limits<std::int64_t>::max();
   auto lat = std::numeric_limits<std::int64_t>::max();
 
-  auto pbf_node = protozero::pbf_message<node>{s};
+  auto pbf_node = protozero::pbf_message<tag::node>{s};
   while (pbf_node.next()) {
     switch (pbf_node.tag_and_type()) {
-      case protozero::tag_and_type(node::required_sint64_id,
+      case protozero::tag_and_type(tag::node::kRequiredSint64Id,
                                    protozero::pbf_wire_type::varint):
         id = pbf_node.get_sint64();
         break;
 
-      case protozero::tag_and_type(node::packed_uint32_keys,
+      case protozero::tag_and_type(tag::node::kPackedUint32Keys,
                                    protozero::pbf_wire_type::length_delimited):
         keys = {pbf_node.get_view()};
         break;
 
-      case protozero::tag_and_type(node::packed_uint32_vals,
+      case protozero::tag_and_type(tag::node::kPackedUint32Vals,
                                    protozero::pbf_wire_type::length_delimited):
         values = {pbf_node.get_view()};
         break;
 
-      case protozero::tag_and_type(node::required_sint64_lat,
+      case protozero::tag_and_type(tag::node::kRequiredSint64Lat,
                                    protozero::pbf_wire_type::varint):
         lat = pbf_node.get_sint64();
         break;
 
-      case protozero::tag_and_type(node::required_sint64_lon,
+      case protozero::tag_and_type(tag::node::kRequiredSint64Lon,
                                    protozero::pbf_wire_type::varint):
         lon = pbf_node.get_sint64();
         break;
@@ -188,27 +187,27 @@ void decode_way(std::string_view s,
   auto id = std::uint64_t{};
   auto keys = varint<std::uint32_t>{};
   auto values = varint<std::uint32_t>{};
-  auto refs = varint<std::int64_t>{};
+  auto refs = delta_varint<std::int64_t>{};
 
-  protozero::pbf_message<way> pbf_way{s};
+  protozero::pbf_message<tag::way> pbf_way{s};
   while (pbf_way.next()) {
     switch (pbf_way.tag_and_type()) {
-      case protozero::tag_and_type(way::required_int64_id,
+      case protozero::tag_and_type(tag::way::kRequiredInt64Id,
                                    protozero::pbf_wire_type::varint):
         id = pbf_way.get_int64();
         break;
 
-      case protozero::tag_and_type(way::packed_uint32_keys,
+      case protozero::tag_and_type(tag::way::kPackedUint32Keys,
                                    protozero::pbf_wire_type::length_delimited):
         keys = {pbf_way.get_view()};
         break;
 
-      case protozero::tag_and_type(way::packed_uint32_vals,
+      case protozero::tag_and_type(tag::way::kPackedUint32Vals,
                                    protozero::pbf_wire_type::length_delimited):
         values = {pbf_way.get_view()};
         break;
 
-      case protozero::tag_and_type(way::packed_sint64_refs,
+      case protozero::tag_and_type(tag::way::kPackedSint64Refs,
                                    protozero::pbf_wire_type::length_delimited):
         refs = {pbf_way.get_view()};
         break;
@@ -236,35 +235,35 @@ void decode_relation(std::string_view s,
   auto types = varint<std::uint32_t>{};
   auto refs = varint<std::int64_t>{};
 
-  auto pbf_relation = protozero::pbf_message<relation>{s};
+  auto pbf_relation = protozero::pbf_message<tag::relation>{s};
   while (pbf_relation.next()) {
     switch (pbf_relation.tag_and_type()) {
-      case protozero::tag_and_type(relation::required_int64_id,
+      case protozero::tag_and_type(tag::relation::kRequiredInt64Id,
                                    protozero::pbf_wire_type::varint):
         id = pbf_relation.get_int64();
         break;
 
-      case protozero::tag_and_type(relation::packed_uint32_keys,
+      case protozero::tag_and_type(tag::relation::kPackedUint32Keys,
                                    protozero::pbf_wire_type::length_delimited):
         keys = {pbf_relation.get_view()};
         break;
 
-      case protozero::tag_and_type(relation::packed_uint32_vals,
+      case protozero::tag_and_type(tag::relation::kPackedUint32Vals,
                                    protozero::pbf_wire_type::length_delimited):
         values = {pbf_relation.get_view()};
         break;
 
-      case protozero::tag_and_type(relation::packed_int32_roles_sid,
+      case protozero::tag_and_type(tag::relation::kPackedInt32RolesSid,
                                    protozero::pbf_wire_type::length_delimited):
         roles = {pbf_relation.get_view()};
         break;
 
-      case protozero::tag_and_type(relation::packed_sint64_memids,
+      case protozero::tag_and_type(tag::relation::kPackedSint64Memids,
                                    protozero::pbf_wire_type::length_delimited):
         refs = {pbf_relation.get_view()};
         break;
 
-      case protozero::tag_and_type(relation::packed_MemberType_types,
+      case protozero::tag_and_type(tag::relation::kPackedMemberTypeTypes,
                                    protozero::pbf_wire_type::length_delimited):
         types = {pbf_relation.get_view()};
         break;
@@ -297,16 +296,16 @@ void decode_primitive(std::string_view s,
                       RelFn&& on_rel) {
   strings.clear();
   auto const meta = decode_primitive_block_metadata(s, strings);
-  auto pbf_primitive_block = protozero::pbf_message<primitive_block>{s};
+  auto pbf_primitive_block = protozero::pbf_message<tag::primitive_block>{s};
   while (pbf_primitive_block.next(
-      primitive_block::repeated_PrimitiveGroup_primitivegroup,
+      tag::primitive_block::kRepeatedPrimitiveGroupPrimitivegroup,
       protozero::pbf_wire_type::length_delimited)) {
-    auto pbf_primitive_group = protozero::pbf_message<primitive_group>{
+    auto pbf_primitive_group = protozero::pbf_message<tag::primitive_group>{
         pbf_primitive_block.get_message()};
     while (pbf_primitive_group.next()) {
       switch (pbf_primitive_group.tag_and_type()) {
         case protozero::tag_and_type(
-            primitive_group::repeated_Node_nodes,
+            tag::primitive_group::kRepeatedNodeNodes,
             protozero::pbf_wire_type::length_delimited):
           if (read_nodes) {
             decode_node(pbf_primitive_group.get_view(), meta, strings, on_node);
@@ -316,7 +315,7 @@ void decode_primitive(std::string_view s,
           break;
 
         case protozero::tag_and_type(
-            primitive_group::optional_DenseNodes_dense,
+            tag::primitive_group::kOptionalDenseNodesDense,
             protozero::pbf_wire_type::length_delimited):
           if (read_nodes) {
             decode_dense_nodes(pbf_primitive_group.get_view(), strings, meta,
@@ -327,7 +326,7 @@ void decode_primitive(std::string_view s,
           break;
 
         case protozero::tag_and_type(
-            primitive_group::repeated_Way_ways,
+            tag::primitive_group::kRepeatedWayWays,
             protozero::pbf_wire_type::length_delimited):
           if (read_ways) {
             decode_way(pbf_primitive_group.get_view(), strings, on_way);
@@ -337,7 +336,7 @@ void decode_primitive(std::string_view s,
           break;
 
         case protozero::tag_and_type(
-            primitive_group::repeated_Relation_relations,
+            tag::primitive_group::kRepeatedRelationRelations,
             protozero::pbf_wire_type::length_delimited):
           if (read_relations) {
             decode_relation(pbf_primitive_group.get_view(), strings, on_rel);
