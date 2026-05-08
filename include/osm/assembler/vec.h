@@ -5,20 +5,17 @@
 
 #include "osm/types.h"
 
-namespace assembler {
-/**
- * This helper class models a 2D vector in the mathematical sense.
- * It uses 64 bit integers internally which has enough precision
- * for most operations with inputs based on 32 bit locations.
- */
+namespace osm {
+
 struct vec {
+  constexpr vec(std::int64_t a, std::int64_t b) noexcept : x{a}, y{b} {}
+  constexpr explicit vec(const location& l) noexcept
+      : x{l.x()}, y{l.y()} {}
+  constexpr explicit vec(const node_ref& nr) noexcept
+      : x{nr.location().x()}, y{nr.location().y()} {}
+
   std::int64_t x;
   std::int64_t y;
-  constexpr vec(std::int64_t a, std::int64_t b) noexcept : x(a), y(b) {}
-  constexpr explicit vec(const osm::Location& l) noexcept
-      : x(l.x()), y(l.y()) {}
-  constexpr explicit vec(const osm::NodeRef& nr) noexcept
-      : x(nr.location().x()), y(nr.location().y()) {}
 };
 
 constexpr vec operator+(const vec& lhs, const vec& rhs) noexcept {
@@ -56,4 +53,5 @@ inline std::basic_ostream<TChar, TTraits>& operator<<(
     std::basic_ostream<TChar, TTraits>& out, const vec& v) {
   return out << '(' << v.x << ',' << v.y << ')';
 }
-}  // namespace assembler
+
+}  // namespace osm

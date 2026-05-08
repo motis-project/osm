@@ -1,101 +1,76 @@
 #pragma once
 
-#include <cassert>
-#include <cmath>
 #include <cstdint>
 #include <vector>
+
+#include "ankerl/cista_adapter.h"
+
+#include "cista/containers/vector.h"
+#include "cista/containers/vecvec.h"
+#include "cista/strong.h"
+
+#include "geo/fixed_latlng.h"
 
 #include "osm/varint.h"
 
 namespace osm {
 
-enum member_type : std::uint32_t { kNode, kWay, kRelation };
-static const int undefined_coordinate = 2147483647;
-static const int coordinate_precision = 10000000;
+enum class member_type : std::uint32_t { kNode, kWay, kRelation };
 using object_id_type = std::int64_t;
+using location = geo::fixed_latlng;
 
-struct Location {
-  std::int32_t x_;
-  std::int32_t y_;
-  Location() : x_(undefined_coordinate), y_(undefined_coordinate) {}
-  constexpr Location(const std::int32_t x, const std::int32_t y) noexcept
-      : x_(x), y_(y) {}
-  static int32_t double_to_fix(const double c) noexcept {
-    return static_cast<int32_t>(std::round(c * coordinate_precision));
-  }
-  Location(const double lon, const double lat)
-      : x_(double_to_fix(lon)), y_(double_to_fix(lat)) {}
-  constexpr std::int32_t x() const noexcept { return x_; }
-  constexpr std::int32_t y() const noexcept { return y_; }
+using way_idx_t = cista::strong<std::uint32_t, struct _way_idx>;
 
-  Location& set_x(const std::int32_t x) noexcept {
-    x_ = x;
-    return *this;
-  }
-  Location& set_y(const std::int32_t y) noexcept {
-    y_ = y;
-    return *this;
-  }
-  constexpr bool valid() const noexcept {
-    return x_ >= -180 * coordinate_precision &&
-           x_ <= 180 * coordinate_precision &&
-           y_ >= -90 * coordinate_precision && y_ <= 90 * coordinate_precision;
-  }
-  constexpr bool is_set() const noexcept {
-    return x_ != undefined_coordinate && y_ != undefined_coordinate;
-  }
-  inline bool operator==(const Location& other_location) const {
-    return x_ == other_location.x() && y_ == other_location.y();
-  }
-  inline bool operator!=(const Location& other_location) const {
-    return !(*this == other_location);
-  }
-  inline bool operator<(const Location& other_location) const {
-    return (x_ == other_location.x() && y_ < other_location.y()) ||
-           x_ < other_location.x();
-  }
-  inline bool operator>(const Location& other_location) const {
-    return (other_location.x() == x_ && other_location.y() < y_) ||
-           other_location.x() < x_;
-  }
-};
+template <typename K, typename V>
+using vector_map = cista::raw::vector_map<K, V>;
 
-struct Node {
-  object_id_type id_;
-  osm::Location node_loc_;
-  osm::Location location() const noexcept { return node_loc_; }
+template <typename K, typename V, typename SizeType = cista::base_t<K>>
+using vecvec = cista::raw::vecvec<K, V, SizeType>;
+
+template <typename K, typename V>
+using hash_map = cista::raw::ankerl_map<K, V>;
+
+struct node {
+  // Use the qualified geo type inside the struct to avoid colliding with the
+  // `location()` method name in class scope.
+  geo::fixed_latlng location() const noexcept { return node_loc_; }
   object_id_type id() const noexcept { return id_; }
-  Node& set_location(const osm::Location& location) noexcept {
-    node_loc_ = location;
+  node& set_location(geo::fixed_latlng const& l) noexcept {
+    node_loc_ = l;
     return *this;
   }
+
+  object_id_type id_;
+  geo::fixed_latlng node_loc_;
 };
 
-struct NodeRef {
-  object_id_type ref_id;
-  osm::Location loc;
+struct node_ref {
   constexpr object_id_type ref() const { return ref_id; }
-  const osm::Location& location() const noexcept { return loc; }
-  osm::Location& location() noexcept { return loc; }
-  void set_location(osm::Location l) { loc = l; }
+  geo::fixed_latlng const& location() const noexcept { return loc; }
+  geo::fixed_latlng& location() noexcept { return loc; }
+  void set_location(geo::fixed_latlng l) { loc = l; }
+
+  object_id_type ref_id;
+  geo::fixed_latlng loc;
 };
 
-struct Way {
-  object_id_type id;
-  std::vector<NodeRef> node_refs;
-  std::vector<NodeRef>& nodes() { return node_refs; }
-  const std::vector<NodeRef>& nodes() const { return node_refs; }
+struct way {
+  std::vector<node_ref>& nodes() { return node_refs; }
+  std::vector<node_ref> const& nodes() const { return node_refs; }
   bool ends_have_same_id() const noexcept {
-    // assert(!nodes().empty());
     return nodes().front().ref() == nodes().back().ref();
   }
+
+  object_id_type id;
+  std::vector<node_ref> node_refs;
 };
 
 template <typename Members>
-struct Relation {
+struct relation {
+  constexpr Members members() const { return members_; }
+
   object_id_type id;
   Members members_;
-  constexpr Members members() const { return members_; }
 };
 
 }  // namespace osm

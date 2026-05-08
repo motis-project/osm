@@ -2,116 +2,114 @@
 
 #include <protozero/types.hpp>
 
-namespace osm {
+namespace osm::tag {
 
 enum class blob : protozero::pbf_tag_type {
-  optional_bytes_raw = 1,
-  optional_int32_raw_size = 2,
-  optional_bytes_zlib_data = 3,
-  optional_bytes_lzma_data = 4,
-  optional_bytes_lz4_data = 6,
-  optional_bytes_zstd_data = 7
+  kOptionalBytesRaw = 1,
+  kOptionalInt32RawSize = 2,
+  kOptionalBytesZlibData = 3,
+  kOptionalBytesLzmaData = 4,
+  kOptionalBytesLz4Data = 6,
+  kOptionalBytesZstdData = 7
 };
 
 enum class blob_header : protozero::pbf_tag_type {
-  required_string_type = 1,
-  optional_bytes_indexdata = 2,
-  required_int32_datasize = 3
+  kRequiredStringType = 1,
+  kOptionalBytesIndexdata = 2,
+  kRequiredInt32Datasize = 3
 };
 
 enum class header_block : protozero::pbf_tag_type {
-  optional_HeaderBBox_bbox = 1,
-  repeated_string_required_features = 4,
-  repeated_string_optional_features = 5,
-  optional_string_writingprogram = 16,
-  optional_string_source = 17,
-  optional_int64_osmosis_replication_timestamp = 32,
-  optional_int64_osmosis_replication_sequence_number = 33,
-  optional_string_osmosis_replication_base_url = 34
+  kOptionalHeaderBBoxBbox = 1,
+  kRepeatedStringRequiredFeatures = 4,
+  kRepeatedStringOptionalFeatures = 5,
+  kOptionalStringWritingprogram = 16,
+  kOptionalStringSource = 17,
+  kOptionalInt64OsmosisReplicationTimestamp = 32,
+  kOptionalInt64OsmosisReplicationSequenceNumber = 33,
+  kOptionalStringOsmosisReplicationBaseUrl = 34
 };
 
 enum class header_bbox : protozero::pbf_tag_type {
-  required_sint64_left = 1,
-  required_sint64_right = 2,
-  required_sint64_top = 3,
-  required_sint64_bottom = 4
+  kRequiredSint64Left = 1,
+  kRequiredSint64Right = 2,
+  kRequiredSint64Top = 3,
+  kRequiredSint64Bottom = 4
 };
 
 enum class primitive_block : protozero::pbf_tag_type {
-  required_StringTable_stringtable = 1,
-  repeated_PrimitiveGroup_primitivegroup = 2,
-  optional_int32_granularity = 17,
-  optional_int32_date_granularity = 18,
-  optional_int64_lat_offset = 19,
-  optional_int64_lon_offset = 20
+  kRequiredStringTableStringtable = 1,
+  kRepeatedPrimitiveGroupPrimitivegroup = 2,
+  kOptionalInt32Granularity = 17,
+  kOptionalInt32DateGranularity = 18,
+  kOptionalInt64LatOffset = 19,
+  kOptionalInt64LonOffset = 20
 };
 
 enum class primitive_group : protozero::pbf_tag_type {
-  unknown = 0,
-  repeated_Node_nodes = 1,
-  optional_DenseNodes_dense = 2,
-  repeated_Way_ways = 3,
-  repeated_Relation_relations = 4,
-  repeated_ChangeSet_changesets = 5
+  kUnknown = 0,
+  kRepeatedNodeNodes = 1,
+  kOptionalDenseNodesDense = 2,
+  kRepeatedWayWays = 3,
+  kRepeatedRelationRelations = 4,
+  kRepeatedChangeSetChangesets = 5
 };
 
-enum class string_table : protozero::pbf_tag_type { repeated_bytes_s = 1 };
+enum class string_table : protozero::pbf_tag_type { kRepeatedBytesS = 1 };
 
 enum class info : protozero::pbf_tag_type {
-  optional_int32_version = 1,
-  optional_int64_timestamp = 2,
-  optional_int64_changeset = 3,
-  optional_int32_uid = 4,
-  optional_uint32_user_sid = 5,
-  optional_bool_visible = 6
+  kOptionalInt32Version = 1,
+  kOptionalInt64Timestamp = 2,
+  kOptionalInt64Changeset = 3,
+  kOptionalInt32Uid = 4,
+  kOptionalUint32UserSid = 5,
+  kOptionalBoolVisible = 6
 };
 
 enum class dense_info : protozero::pbf_tag_type {
-  packed_int32_version = 1,
-  packed_sint64_timestamp = 2,
-  packed_sint64_changeset = 3,
-  packed_sint32_uid = 4,
-  packed_sint32_user_sid = 5,
-  packed_bool_visible = 6
+  kPackedInt32Version = 1,
+  kPackedSint64Timestamp = 2,
+  kPackedSint64Changeset = 3,
+  kPackedSint32Uid = 4,
+  kPackedSint32UserSid = 5,
+  kPackedBoolVisible = 6
 };
 
 enum class node : protozero::pbf_tag_type {
-  required_sint64_id = 1,
-  packed_uint32_keys = 2,
-  packed_uint32_vals = 3,
-  optional_Info_info = 4,
-  required_sint64_lat = 8,
-  required_sint64_lon = 9
+  kRequiredSint64Id = 1,
+  kPackedUint32Keys = 2,
+  kPackedUint32Vals = 3,
+  kOptionalInfoInfo = 4,
+  kRequiredSint64Lat = 8,
+  kRequiredSint64Lon = 9
 };
 
 enum class dense_nodes : protozero::pbf_tag_type {
-  packed_sint64_id = 1,
-  optional_DenseInfo_denseinfo = 5,
-  packed_sint64_lat = 8,
-  packed_sint64_lon = 9,
-  packed_int32_keys_vals = 10
+  kPackedSint64Id = 1,
+  kOptionalDenseInfoDenseinfo = 5,
+  kPackedSint64Lat = 8,
+  kPackedSint64Lon = 9,
+  kPackedInt32KeysVals = 10
 };
 
 enum class way : protozero::pbf_tag_type {
-  required_int64_id = 1,
-  packed_uint32_keys = 2,
-  packed_uint32_vals = 3,
-  optional_Info_info = 4,
-  packed_sint64_refs = 8,
-  packed_sint64_lat = 9,
-  packed_sint64_lon = 10
+  kRequiredInt64Id = 1,
+  kPackedUint32Keys = 2,
+  kPackedUint32Vals = 3,
+  kOptionalInfoInfo = 4,
+  kPackedSint64Refs = 8,
+  kPackedSint64Lat = 9,
+  kPackedSint64Lon = 10
 };
 
 enum class relation : protozero::pbf_tag_type {
-  required_int64_id = 1,
-  packed_uint32_keys = 2,
-  packed_uint32_vals = 3,
-  optional_Info_info = 4,
-  packed_int32_roles_sid = 8,
-  packed_sint64_memids = 9,
-  packed_MemberType_types = 10
+  kRequiredInt64Id = 1,
+  kPackedUint32Keys = 2,
+  kPackedUint32Vals = 3,
+  kOptionalInfoInfo = 4,
+  kPackedInt32RolesSid = 8,
+  kPackedSint64Memids = 9,
+  kPackedMemberTypeTypes = 10
 };
 
-enum class area : protozero::pbf_tag_type {};
-
-}  // namespace osm
+}  // namespace osm::tag

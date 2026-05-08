@@ -3,9 +3,13 @@
 #include <algorithm>
 #include <mutex>
 #include <optional>
+#include <string_view>
+
+#include "cista/hash.h"
+
+#include "utl/helpers/algorithm.h"
 
 #include "osm/assembler.h"
-#include "osm/assembler/assemble_rings.h"
 #include "osm/assembler/assembler_stats.h"
 #include "osm/assembler/assembler_types.h"
 #include "osm/decoder.h"
@@ -13,147 +17,184 @@
 namespace osm {
 
 struct multi_polygon {
-  std::int64_t relation_id;
-  std::vector<std::int64_t> ways_refs;
+  std::int64_t relation_id_;
+  std::vector<std::int64_t> ways_refs_;
 };
 
-struct PolygonManager {
-  std::mutex stats_mtx;
-  assembler::area_stats all_stats{};
-  bool assemble_way_polygons_ = false;
-  std::mutex mp_vec_mtx;
-  std::vector<osm::multi_polygon> mp_vec_ = std::vector<osm::multi_polygon>{};
-  std::mutex ways_vec_mtx;
-  std::unordered_map<object_id_type, osm::Way> all_ways_;
-  PolygonManager(bool assemble_way_polygons = false)
-      : assemble_way_polygons_(assemble_way_polygons) {}
-
-  template <typename Tags>
-  inline bool is_area(Tags&& tags) {
-    for (auto const& [key, value] : tags) {
-      if (key == "type" && (value == "multipolygon" || value == "boundary")) {
-        return true;
-      }
-    }
-    return false;
-  }
-
-  template <typename Tags>
-  inline bool is_way_area(Tags&& tags) {
-    bool has_line_indicator = false;
-    bool has_area_indicator = false;
-    for (auto const& [key, value] : tags) {
-      if (key == "area") {
-        if (value == "yes") {
+template <typename Tags>
+inline bool is_area(Tags&& tags) {
+  for (auto const& [key, value] : tags) {
+    switch (cista::hash(std::string_view{key})) {
+      using namespace std::string_view_literals;
+      case cista::hash("type"):
+        if (value == "multipolygon"sv || value == "boundary"sv) {
           return true;
-        } else if (value == "no") {
+        }
+        break;
+    }
+  }
+  return false;
+}
+
+template <typename Tags>
+inline bool is_way_area(Tags&& tags) {
+  auto has_line_indicator = false;
+  auto has_area_indicator = false;
+  for (auto const& [key, value] : tags) {
+    switch (cista::hash(std::string_view{key})) {
+      using namespace std::string_view_literals;
+      case cista::hash("area"):
+        if (value == "yes"sv) {
+          return true;
+        } else if (value == "no"sv) {
           return false;
         }
-        continue;
-      }
-      // area indicator (implicit)
-      if (key == "building" || key == "landuse" || key == "natural" ||
-          key == "amenity" || key == "leisure" || key == "tourism" ||
-          (key == "waterway" && value == "riverbank") ||
-          (key == "waterway" && value == "dock") ||
-          (key == "power" && (value == "plant" || value == "substation"))) {
-        has_area_indicator = true;
-        continue;
-      }
-      // line indicator overrides area indicator
-      if (key == "highway" || key == "railway" ||
-          (key == "waterway" && value != "riverbank" && value != "dock") ||
-          (key == "barrier" || (key == "man_made" && value == "pier"))) {
-        has_line_indicator = true;
-      }
+        break;
+      case cista::hash("building"):
+      case cista::hash("landuse"):
+      case cista::hash("natural"):
+      case cista::hash("amenity"):
+      case cista::hash("leisure"):
+      case cista::hash("tourism"): has_area_indicator = true; break;
+      case cista::hash("waterway"):
+        if (value == "riverbank"sv || value == "dock"sv) {
+          has_area_indicator = true;
+        } else {
+          has_line_indicator = true;
+        }
+        break;
+      case cista::hash("power"):
+        if (value == "plant"sv || value == "substation"sv) {
+          has_area_indicator = true;
+        }
+        break;
+      case cista::hash("highway"):
+      case cista::hash("railway"):
+      case cista::hash("barrier"): has_line_indicator = true; break;
+      case cista::hash("man_made"):
+        if (value == "pier"sv) {
+          has_line_indicator = true;
+        }
+        break;
     }
-    return has_area_indicator && !has_line_indicator;
   }
+  return has_area_indicator && !has_line_indicator;
+}
 
-  int count_non_areas = 0;
+struct polygon_manager {
+  explicit polygon_manager(bool assemble_way_polygons = false)
+      : assemble_way_polygons_{assemble_way_polygons} {}
+
   template <typename Members, typename Tags>
   void save_ways_of_relation(std::int64_t const id,
                              Members&& members,
                              Tags&& tags) {
     if (!is_area(tags)) {
-      count_non_areas++;
+      ++count_non_areas_;
       return;
     }
-    auto mp = osm::multi_polygon{};
-    mp.relation_id = id;
+
+    auto mp = multi_polygon{};
+    mp.relation_id_ = id;
     for (auto const [ref, role, type] : members) {
-      if (type != osm::member_type::kWay) {
-        continue;
+      if (type == member_type::kWay) {
+        mp.ways_refs_.emplace_back(ref);
       }
-      mp.ways_refs.emplace_back(ref);
     }
-    std::lock_guard<std::mutex> lock(mp_vec_mtx);
+
+    std::lock_guard<std::mutex> lock(mp_vec_mtx_);
     mp_vec_.emplace_back(std::move(mp));
   }
 
-  void reserve_way_map(size_t expected_count) {
-    all_ways_.reserve(expected_count);
+  void reserve_way_map(std::size_t expected_count) {
+    way_to_id_.reserve(expected_count);
+    osm_id_to_way_.reserve(expected_count);
   }
 
   template <typename Tags>
-  std::optional<assembler::polygon_area> save_ways(osm::Way way, Tags&& tags) {
-    {
-      std::lock_guard<std::mutex> lock(ways_vec_mtx);
-      all_ways_.insert({way.id, way});
-    }
+  std::optional<polygon_area> save_ways(way way, Tags&& tags) {
+    auto result = std::optional<polygon_area>{};
     // for the more defensive version, include is_way_area check.
     if (assemble_way_polygons_) {  // && is_way_area(tags)) {
-      assembler::polygon_area a(way.id);
+      auto a = polygon_area{way.id};
       a.from_way = true;
-      assembler::assembly assemble = assembler::assembly{};
+      auto assemble = assembly{};
       if (assemble.assembling_area_from_way(way, a)) {
-        return a;
+        result = a;
       }
     }
-    return std::nullopt;
-  }
-
-  std::vector<const osm::Way*> make_const_way_ptrs(
-      const std::vector<object_id_type>& ids) {
-    std::vector<const osm::Way*> ptrs = {};
-    ptrs.reserve(ids.size());
-    for (const auto& id : ids) {
-      auto it = all_ways_.find(id);
-      if (it != all_ways_.end()) {
-        ptrs.push_back(&(*it).second);
-      }
+    {
+      auto lock = std::lock_guard{ways_vec_mtx_};
+      auto const idx =
+          way_idx_t{static_cast<cista::base_t<way_idx_t>>(way_to_id_.size())};
+      way_to_id_.emplace_back(way.id);
+      way_node_refs_.emplace_back(std::move(way.node_refs));
+      osm_id_to_way_[way.id] = idx;
     }
-    std::sort(
-        ptrs.begin(), ptrs.end(),
-        [](const osm::Way* a, const osm::Way* b) { return a->id < b->id; });
-    return ptrs;
+    return result;
   }
 
   template <typename Members, typename Tags>
-  assembler::polygon_area assemble_area(std::int64_t const id,
-                                        Members&& members,
-                                        Tags&& tags) {
-    assembler::polygon_area a(id);
+  polygon_area assemble_area(std::int64_t const id,
+                             Members&& members,
+                             Tags&& tags) {
+    auto a = polygon_area{id};
     if (!is_area(tags)) {
       return a;
     }
-    assembler::assembly assemble = assembler::assembly{};
-    bool worked = false;
-    osm::Relation r = {id, members};
-    std::vector<const osm::Way*> ways = {};
-    for (auto elem : mp_vec_) {
-      if (elem.relation_id == id) {
-        ways = make_const_way_ptrs(elem.ways_refs);
-        break;
+
+    auto assemble = assembly{};
+    auto worked = false;
+    auto r = relation{id, members};
+
+    // Materialize temporary `way`s for each member so the assembler (which
+    // takes `std::vector<way const*>`) sees stable pointers. The actual
+    // node-ref storage lives in `way_node_refs_`; we copy a slice per used
+    // way for the duration of this call.
+    auto ways_storage = std::vector<way>{};
+    auto ways = std::vector<way const*>{};
+    for (auto const& mp : mp_vec_) {
+      if (mp.relation_id_ != id) {
+        continue;
       }
+      ways_storage.reserve(mp.ways_refs_.size());
+      for (auto const osm_id : mp.ways_refs_) {
+        auto const it = osm_id_to_way_.find(osm_id);
+        if (it == osm_id_to_way_.end()) {
+          continue;
+        }
+        auto const w_idx = it->second;
+        auto const bucket = way_node_refs_[w_idx];
+        ways_storage.push_back(
+            way{way_to_id_[w_idx],
+                std::vector<node_ref>(bucket.begin(), bucket.end())});
+      }
+      ways.reserve(ways_storage.size());
+      for (auto const& w : ways_storage) {
+        ways.push_back(&w);
+      }
+      utl::sort(ways, [](way const* a, way const* b) { return a->id < b->id; });
+      break;
     }
+
     worked = assemble.assembling_area_from_relation(r, ways, a);
-    {
-      // accumulate all statistics
-      std::lock_guard<std::mutex> lock(stats_mtx);
-      all_stats += a.pa_stats;
-    }
+
+    all_stats_ += a.pa_stats;
+
     return a;
   }
-};  // struct PolygonManager
+
+  area_stats all_stats_{};
+  bool assemble_way_polygons_{false};
+
+  std::mutex mp_vec_mtx_;
+  std::vector<multi_polygon> mp_vec_{};
+
+  std::mutex ways_vec_mtx_;
+  vecvec<way_idx_t, node_ref> way_node_refs_{};
+  vector_map<way_idx_t, object_id_type> way_to_id_{};
+  hash_map<object_id_type, way_idx_t> osm_id_to_way_{};
+  std::atomic_uint64_t count_non_areas_{0};
+};
+
 }  // namespace osm

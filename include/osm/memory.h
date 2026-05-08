@@ -33,26 +33,23 @@ DEALINGS IN THE SOFTWARE.
 
 */
 
+#include <cstdint>
 #include <cstdlib>
 #include <fstream>
 #include <string>
 
-namespace ium {
+namespace osm {
 
-class MemoryUsage {
-
-  int64_t m_current = 0;
-  int64_t m_peak = 0;
+struct memory_usage {
 
 #ifdef __linux__
-  static int64_t parse_number(const std::string& line) {
-    const auto f = line.find_first_of("0123456789");
-    const auto l = line.find_last_of("0123456789");
+  static std::int64_t parse_number(std::string const& line) {
+    auto const f = line.find_first_of("0123456789");
+    auto const l = line.find_last_of("0123456789");
     return std::stoul(line.substr(f, l - f + 1));
   }
 #endif
 
-public:
   /**
    * Get the memory usage for the current process. The constructor will
    * get the memory usage. Use the current() and peak() calls to access
@@ -61,20 +58,20 @@ public:
    * This will only work on Linux, on other architectures this will
    * always return 0.
    */
-  MemoryUsage() {
+  memory_usage() {
 #ifdef __linux__
-    static const char* filename = "/proc/self/status";
-    std::ifstream status_file(filename);
+    static auto const* filename = "/proc/self/status";
+    auto status_file = std::ifstream{filename};
 
     if (status_file.is_open()) {
-      std::string line;
+      auto line = std::string{};
       while (!status_file.eof()) {
         std::getline(status_file, line);
         if (line.substr(0, 6) == "VmPeak") {
-          m_peak = parse_number(line);
+          peak_ = parse_number(line);
         }
         if (line.substr(0, 6) == "VmSize") {
-          m_current = parse_number(line);
+          current_ = parse_number(line);
         }
       }
     }
@@ -82,13 +79,16 @@ public:
   }
 
   /// Return current memory usage in MBytes
-  int current() const { return static_cast<int>(m_current / 1024); }
+  int current() const { return static_cast<int>(current_ / 1024); }
 
   /// Return peak memory usage in MBytes
-  int peak() const { return static_cast<int>(m_peak / 1024); }
+  int peak() const { return static_cast<int>(peak_ / 1024); }
 
-};  // class MemoryUsage
+  std::int64_t current_{0};
+  std::int64_t peak_{0};
 
-}  // namespace ium
+};  // struct memory_usage
+
+}  // namespace osm
 
 #endif  // OSMIUM_UTIL_MEMORY_HPP

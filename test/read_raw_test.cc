@@ -1,19 +1,22 @@
-#include <chrono>
-#include <ranges>
-#include <string_view>
+#include "osm/raw_reader.h"
 
-#include "fmt/ranges.h"
-#include "gtest/gtest.h"
-#include "utl/progress_tracker.h"
-
-#include "osm/decoder.h"
-#include "osm/filing/tmp_file.h"
-#include "osm/hnidx/hybrid_node_index.h"
-#include "osm/inflate.h"
-#include "osm/memory.h"
-#include "osm/osm.h"
+#include <atomic>
+#include <filesystem>
+#include <variant>
 
 #include "boost/fiber/all.hpp"
+
+#include "fmt/ranges.h"
+
+#include "gtest/gtest.h"
+
+#include "utl/progress_tracker.h"
+
+#include "osm/memory.h"
+#include "osm/mp_manager.h"
+#include "osm/node_idx.h"
+#include "osm/parse.h"
+#include "osm/way_handler.h"
 
 namespace bf = boost::fibers;
 
@@ -55,79 +58,83 @@ TEST(osm, varint) {
   EXPECT_EQ(it, v.end());
 }
 
-TEST(osm, read_raw_test) {
+TEST(a, b) {
+  auto bars = utl::global_progress_bars{false};
+
   auto r = osm::raw_reader{
-      .file_ = cista::mmap{"/home/tmir/OSM/berlin-251113.osm.pbf",
+      .file_ = cista::mmap{"/home/felix/Downloads/germany-latest.osm.pbf",
                            cista::mmap::protection::READ}};
 
-  auto bars = utl::global_progress_bars{false};
   auto pt = utl::activate_progress_tracker("parse");
-  pt->in_high(r.rest_.size());
+  pt->in_high(r.rest_.size() * 2U);
 
-  auto const n_threads = std::thread::hardware_concurrency();
+  auto const idx_path =
+      std::filesystem::temp_directory_path() / "osm_node_idx.bin";
+  auto node_idx = osm::node_idx_t{
+      cista::mmap{idx_path.generic_string().c_str()}};
+  auto node_handler = osm::node_idx_handler{node_idx};
 
-  auto n_nodes = std::atomic_uint64_t{0U};
+  auto mp_manager = osm::polygon_manager{true};
+
   auto n_ways = std::atomic_uint64_t{0U};
   auto n_rels = std::atomic_uint64_t{0U};
+  auto n_areas = std::atomic_uint64_t{0U};
 
-  auto print_mtx = std::mutex{};
+  // PASS 1: nodes -> idx; remember way-refs for each relation; count ways.
+  osm::parse_osm(
+      r,
+      [] { return std::monostate{}; },
+      node_handler,
+      [&](auto&, std::int64_t const, auto&&, auto&&) { ++n_ways; },
+      [&](auto&, std::int64_t const id, auto&& members, auto&& tags) {
+        ++n_rels;
+        mp_manager.save_ways_of_relation(id, members, tags);
+      },
+      pt->update_fn());
 
-  auto pool = std::vector<std::thread>{n_threads};
-  auto fin = std::atomic_bool{false};
-  auto fin_cv = bf::condition_variable_any{};
-  auto fin_mutex = std::mutex{};
+  mp_manager.reserve_way_map(static_cast<std::size_t>(n_ways.load()));
+  r.reset();
 
-  auto ch = bf::buffered_channel<osm::buf>{64U};
-  for (auto i = 0U; i != n_threads; ++i) {
-    bf::fiber([&]() {
-      auto decompressor = osm::inflate{};
-      auto out = std::string{};
-      auto strings = std::vector<std::string_view>{};
+  // PASS 2: rebuild ways with locations -> mp_manager; assemble areas from
+  // relations once all ways are in. Synchronization uses bf primitives so
+  // waiting fibers don't stall the work-stealing scheduler.
+  auto ways_processed = std::atomic_uint64_t{0U};
+  auto ways_done = false;
+  auto rel_mtx = bf::mutex{};
+  auto rel_cv = bf::condition_variable{};
+  auto const total_ways = n_ways.load();
 
-      for (auto const& b : ch) {
-        out.resize(b.raw_size_);
-        decompressor.decompress(b.compressed_, out);
+  osm::parse_osm(
+      r,
+      [] { return std::monostate{}; },
+      [](auto&, std::int64_t const, geo::latlng const&, auto&&) {},
+      osm::way_handler{[&](auto&, osm::way&& w, auto&& tags) {
+        osm::update_locations_of_way(node_idx, w);
+        if (auto a = mp_manager.save_ways(std::move(w), tags);
+            a && a->valid) {
+          ++n_areas;
+        }
+        if (++ways_processed == total_ways) {
+          auto lock = std::lock_guard{rel_mtx};
+          ways_done = true;
+          rel_cv.notify_all();
+        }
+      }},
+      [&](auto&, std::int64_t const id, auto&& members, auto&& tags) {
+        auto lock = std::unique_lock{rel_mtx};
+        rel_cv.wait(lock, [&] { return ways_done; });
+        lock.unlock();
+        auto area = mp_manager.assemble_area(id, members, tags);
+        if (area.valid) {
+          ++n_areas;
+        }
+      },
+      pt->update_fn());
 
-        osm::decode_primitive(
-            out, strings, true, true, true,
-            [&](std::int64_t const id, geo::latlng const& pos, auto&& tags) {
-              ++n_nodes;
-            },
-            [&](std::int64_t const id, auto&& refs, auto&& tags) { ++n_ways; },
-            [&](std::int64_t const id, auto&& members, auto&& tags) {
-              ++n_rels;
-            });
-      }
-    }).detach();
-  }
+  std::cout << "ways: " << n_ways << "\n"
+            << "relations: " << n_rels << "\n"
+            << "valid areas: " << n_areas << "\n";
 
-  for (auto& t : pool) {
-    t = std::thread{[&]() {
-      bf::use_scheduling_algorithm<bf::algo::work_stealing>(n_threads + 1U);
-      auto l = std::unique_lock{fin_mutex};
-      fin_cv.wait(l, [&]() { return fin.load(); });
-    }};
-  }
-
-  bf::use_scheduling_algorithm<bf::algo::work_stealing>(n_threads + 1U);
-
-  auto buf = std::optional<osm::buf>{};
-  while ((buf = r.read()).has_value()) {
-    ch.push(*buf);
-    pt->update(r.file_.size() - r.rest_.size());
-  }
-  ch.close();
-  fin.store(true);
-  fin_cv.notify_all();
-
-  for (auto& t : pool) {
-    t.join();
-  }
-
-  std::cout << "number of nodes: " << n_nodes << "\n";
-  std::cout << "number of ways: " << n_ways << "\n";
-  std::cout << "number of relations: " << n_rels << "\n";
-
-  const ium::MemoryUsage memory;
+  const osm::memory_usage memory;
   std::cout << "\nMemory used: " << memory.peak() << " MBytes\n";
 }

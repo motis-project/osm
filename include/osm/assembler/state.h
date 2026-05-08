@@ -2,35 +2,29 @@
 
 #include <list>
 
-#include "ProblemReporter.h"
-#include "assembler_stats.h"
-#include "assembler_types.h"
+#include "osm/assembler/assembler_stats.h"
+#include "osm/assembler/assembler_types.h"
+#include "osm/assembler/problem_reporter.h"
 
-namespace assembler {
+namespace osm {
+
 constexpr std::size_t max_split_locations_ = 100ULL;
 constexpr int max_depth = 20;
 
-/**
- * This struct holds every information needed to build the multipolygon.
- * The statistics and the ProblemReporter are also connected to each
- * multipolygon assembly. To initialise the ProblemReporter and/or the debug
- * flag, use the constructor of the assembly, when initialising it in the
- * PolygonManager.
- */
-struct State {
-  State() = delete;
-  State(const State&) = delete;
-  State& operator=(const State&) = delete;
-  explicit State(std::ostream* out, bool enable_debug = true)
-      : problem_reporter(out, enable_debug), debug(enable_debug) {}
+struct state {
+  state() = delete;
+  state(const state&) = delete;
+  state& operator=(const state&) = delete;
+  explicit state(std::ostream* out, bool enable_debug = true)
+      : problem_reporter{out, enable_debug}, debug{enable_debug} {}
 
   bool debug;
-  SegmentList segment_list{};
+  segment_list segment_list{};
   area_stats stats{};
-  ProblemReporter problem_reporter;
-  std::list<ProtoRing> rings{};
+  problem_reporter problem_reporter;
+  std::list<proto_ring> rings{};
   std::vector<slocation> slocations{};
-  std::vector<osm::Location> split_locations{};
+  std::vector<location> split_locations{};
 };
 
-}  // namespace assembler
+}  // namespace osm
