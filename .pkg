@@ -25,4 +25,4 @@
 [geo]
   url=git@github.com:motis-project/geo.git
   branch=master
-  commit=d862550fd867cd5435225b5f0998981ec4fc2ae3
+  commit=cf38581dcb2a7ddaf9c96a3cb147a44f89893952
