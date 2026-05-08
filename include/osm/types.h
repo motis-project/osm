@@ -3,6 +3,12 @@
 #include <cstdint>
 #include <vector>
 
+#include "ankerl/cista_adapter.h"
+
+#include "cista/containers/vector.h"
+#include "cista/containers/vecvec.h"
+#include "cista/strong.h"
+
 #include "geo/fixed_latlng.h"
 
 #include "osm/varint.h"
@@ -12,6 +18,17 @@ namespace osm {
 enum class member_type : std::uint32_t { kNode, kWay, kRelation };
 using object_id_type = std::int64_t;
 using location = geo::fixed_latlng;
+
+using way_idx_t = cista::strong<std::uint32_t, struct _way_idx>;
+
+template <typename K, typename V>
+using vector_map = cista::raw::vector_map<K, V>;
+
+template <typename K, typename V, typename SizeType = cista::base_t<K>>
+using vecvec = cista::raw::vecvec<K, V, SizeType>;
+
+template <typename K, typename V>
+using hash_map = cista::raw::ankerl_map<K, V>;
 
 struct node {
   // Use the qualified geo type inside the struct to avoid colliding with the

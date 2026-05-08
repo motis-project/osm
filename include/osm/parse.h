@@ -15,6 +15,7 @@
 #include "osm/decoder.h"
 #include "osm/inflate.h"
 #include "osm/raw_reader.h"
+#include "osm/work_stealing.h"
 
 namespace osm {
 
@@ -45,17 +46,27 @@ void parse_osm(raw_reader& r,
                WayFn&& on_way,
                RelFn&& on_rel,
                ProgressConsumer&& progress_consumer = ProgressConsumer{},
-               unsigned const n_threads = std::thread::hardware_concurrency()) {
+               unsigned const n_threads = std::thread::hardware_concurrency(),
+               unsigned const n_fibers = 0U) {
   namespace bf = boost::fibers;
 
+  // Default to one fiber per thread. Pass a larger `n_fibers` (e.g. 4× the
+  // thread count) to oversubscribe — useful when handlers prefetch+sleep
+  // and would otherwise leave OS threads spinning in `pick_next` while the
+  // currently-running fiber is blocked on a page fault.
+  auto const fiber_count = n_fibers == 0U ? n_threads : n_fibers;
+
+  auto group = work_stealing_group{n_threads + 1U};
   auto pool = std::vector<std::thread>{n_threads};
   auto fin = std::atomic_bool{false};
   auto fin_cv = bf::condition_variable_any{};
   auto fin_mutex = std::mutex{};
 
   auto ch = bf::buffered_channel<buf>{64U};
-  for (auto i = 0U; i != n_threads; ++i) {
-    bf::fiber([&]() {
+  auto fibers = std::vector<bf::fiber>{};
+  fibers.reserve(fiber_count);
+  for (auto i = 0U; i != fiber_count; ++i) {
+    fibers.emplace_back([&]() {
       auto local = make_local();
       auto decompressor = inflate{};
       auto out = std::string{};
@@ -76,18 +87,21 @@ void parse_osm(raw_reader& r,
               on_rel(local, std::forward<decltype(a)>(a)...);
             });
       }
-    }).detach();
+    });
   }
 
   for (auto& t : pool) {
     t = std::thread{[&]() {
-      bf::use_scheduling_algorithm<bf::algo::work_stealing>(n_threads + 1U);
+      bf::use_scheduling_algorithm<work_stealing>(group, n_threads + 1U);
       auto l = std::unique_lock{fin_mutex};
       fin_cv.wait(l, [&]() { return fin.load(); });
     }};
   }
 
-  bf::use_scheduling_algorithm<bf::algo::work_stealing>(n_threads + 1U);
+  // Main thread joins as the (n+1)-th participant — must happen AFTER the
+  // host pool has been spawned (the barrier inside `work_stealing` waits for
+  // n+1 participants).
+  bf::use_scheduling_algorithm<work_stealing>(group, n_threads + 1U);
 
   auto next = std::optional<buf>{};
   while ((next = r.read()).has_value()) {
@@ -95,6 +109,13 @@ void parse_osm(raw_reader& r,
     progress_consumer(r.file_.size() - r.rest_.size());
   }
   ch.close();
+
+  // Join fibers before tearing down host-thread schedulers; otherwise a fiber
+  // still in `suspend_until` may dereference a freed algo_.
+  for (auto& f : fibers) {
+    f.join();
+  }
+
   fin.store(true);
   fin_cv.notify_all();
 

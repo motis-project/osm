@@ -17,8 +17,8 @@
 namespace osm {
 
 struct multi_polygon {
-  std::int64_t relation_id;
-  std::vector<std::int64_t> ways_refs;
+  std::int64_t relation_id_;
+  std::vector<std::int64_t> ways_refs_;
 };
 
 template <typename Tags>
@@ -90,24 +90,25 @@ struct polygon_manager {
                              Members&& members,
                              Tags&& tags) {
     if (!is_area(tags)) {
-      ++count_non_areas;
+      ++count_non_areas_;
       return;
     }
 
     auto mp = multi_polygon{};
-    mp.relation_id = id;
+    mp.relation_id_ = id;
     for (auto const [ref, role, type] : members) {
       if (type == member_type::kWay) {
-        mp.ways_refs.emplace_back(ref);
+        mp.ways_refs_.emplace_back(ref);
       }
     }
 
-    std::lock_guard<std::mutex> lock(mp_vec_mtx);
+    std::lock_guard<std::mutex> lock(mp_vec_mtx_);
     mp_vec_.emplace_back(std::move(mp));
   }
 
   void reserve_way_map(std::size_t expected_count) {
-    all_ways_.reserve(expected_count);
+    way_to_id_.reserve(expected_count);
+    osm_id_to_way_.reserve(expected_count);
   }
 
   template <typename Tags>
@@ -123,24 +124,14 @@ struct polygon_manager {
       }
     }
     {
-      auto lock = std::lock_guard{ways_vec_mtx};
-      all_ways_.insert({way.id, std::move(way)});
+      auto lock = std::lock_guard{ways_vec_mtx_};
+      auto const idx =
+          way_idx_t{static_cast<cista::base_t<way_idx_t>>(way_to_id_.size())};
+      way_to_id_.emplace_back(way.id);
+      way_node_refs_.emplace_back(std::move(way.node_refs));
+      osm_id_to_way_[way.id] = idx;
     }
     return result;
-  }
-
-  std::vector<way const*> make_const_way_ptrs(
-      std::vector<object_id_type> const& ids) {
-    auto ptrs = std::vector<way const*>{};
-    ptrs.reserve(ids.size());
-    for (auto const& id : ids) {
-      auto it = all_ways_.find(id);
-      if (it != all_ways_.end()) {
-        ptrs.push_back(&(*it).second);
-      }
-    }
-    utl::sort(ptrs, [](way const* a, way const* b) { return a->id < b->id; });
-    return ptrs;
   }
 
   template <typename Members, typename Tags>
@@ -155,28 +146,55 @@ struct polygon_manager {
     auto assemble = assembly{};
     auto worked = false;
     auto r = relation{id, members};
-    auto ways = std::vector<const way*>{};
-    for (auto elem : mp_vec_) {
-      if (elem.relation_id == id) {
-        ways = make_const_way_ptrs(elem.ways_refs);
-        break;
+
+    // Materialize temporary `way`s for each member so the assembler (which
+    // takes `std::vector<way const*>`) sees stable pointers. The actual
+    // node-ref storage lives in `way_node_refs_`; we copy a slice per used
+    // way for the duration of this call.
+    auto ways_storage = std::vector<way>{};
+    auto ways = std::vector<way const*>{};
+    for (auto const& mp : mp_vec_) {
+      if (mp.relation_id_ != id) {
+        continue;
       }
+      ways_storage.reserve(mp.ways_refs_.size());
+      for (auto const osm_id : mp.ways_refs_) {
+        auto const it = osm_id_to_way_.find(osm_id);
+        if (it == osm_id_to_way_.end()) {
+          continue;
+        }
+        auto const w_idx = it->second;
+        auto const bucket = way_node_refs_[w_idx];
+        ways_storage.push_back(
+            way{way_to_id_[w_idx],
+                std::vector<node_ref>(bucket.begin(), bucket.end())});
+      }
+      ways.reserve(ways_storage.size());
+      for (auto const& w : ways_storage) {
+        ways.push_back(&w);
+      }
+      utl::sort(ways, [](way const* a, way const* b) { return a->id < b->id; });
+      break;
     }
 
     worked = assemble.assembling_area_from_relation(r, ways, a);
 
-    all_stats += a.pa_stats;
+    all_stats_ += a.pa_stats;
 
     return a;
   }
 
-  area_stats all_stats{};
+  area_stats all_stats_{};
   bool assemble_way_polygons_{false};
-  std::mutex mp_vec_mtx;
+
+  std::mutex mp_vec_mtx_;
   std::vector<multi_polygon> mp_vec_{};
-  std::mutex ways_vec_mtx;
-  std::unordered_map<object_id_type, way> all_ways_;
-  std::atomic_uint64_t count_non_areas{0};
+
+  std::mutex ways_vec_mtx_;
+  vecvec<way_idx_t, node_ref> way_node_refs_{};
+  vector_map<way_idx_t, object_id_type> way_to_id_{};
+  hash_map<object_id_type, way_idx_t> osm_id_to_way_{};
+  std::atomic_uint64_t count_non_areas_{0};
 };
 
 }  // namespace osm
