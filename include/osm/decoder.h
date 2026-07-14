@@ -55,18 +55,21 @@ meta_data decode_primitive_block_metadata(
         decode_string_table(pbf_primitive_block.get_view(), strings);
         break;
 
-      case protozero::tag_and_type(tag::primitive_block::kOptionalInt32Granularity,
-                                   protozero::pbf_wire_type::varint):
+      case protozero::tag_and_type(
+          tag::primitive_block::kOptionalInt32Granularity,
+          protozero::pbf_wire_type::varint):
         m.granularity_ = pbf_primitive_block.get_int32();
         break;
 
-      case protozero::tag_and_type(tag::primitive_block::kOptionalInt64LatOffset,
-                                   protozero::pbf_wire_type::varint):
+      case protozero::tag_and_type(
+          tag::primitive_block::kOptionalInt64LatOffset,
+          protozero::pbf_wire_type::varint):
         m.lat_offset_ = pbf_primitive_block.get_int64();
         break;
 
-      case protozero::tag_and_type(tag::primitive_block::kOptionalInt64LonOffset,
-                                   protozero::pbf_wire_type::varint):
+      case protozero::tag_and_type(
+          tag::primitive_block::kOptionalInt64LonOffset,
+          protozero::pbf_wire_type::varint):
         m.lon_offset_ = pbf_primitive_block.get_int64();
         break;
 
@@ -234,7 +237,7 @@ void decode_relation(std::string_view s,
   auto values = varint<std::uint32_t>{};
   auto roles = varint<std::uint32_t>{};
   auto types = varint<std::uint32_t>{};
-  auto refs = varint<std::int64_t>{};
+  auto refs = delta_varint<std::int64_t>{};
 
   auto pbf_relation = protozero::pbf_message<tag::relation>{s};
   while (pbf_relation.next()) {

@@ -12,6 +12,7 @@
 #include "fmt/ostream.h"
 
 #include "utl/helpers/algorithm.h"
+#include "utl/verify.h"
 
 #include "osm/assembler/assembler_types.h"
 #include "osm/assembler/iter.h"
@@ -41,12 +42,15 @@ node_ref_segment* assembly::get_next_segment(const location& location) {
                rhs.location(state_.segment_list, location);
       });
 
-  assert(it != state_.slocations.end());
+  utl::verify(it != state_.slocations.end(),
+              "get_next_segment: no slocation at requested location");
   if (state_.segment_list[it->item].is_done()) {
     ++it;
   }
-  assert(it != state_.slocations.end());
-  assert(!state_.segment_list[it->item].is_done());
+  utl::verify(it != state_.slocations.end(),
+              "get_next_segment: ran past end looking for an open segment");
+  utl::verify(!state_.segment_list[it->item].is_done(),
+              "get_next_segment: candidate segment is already done");
   return &state_.segment_list[it->item];
 }
 
@@ -99,6 +103,8 @@ void assembly::merge_two_rings(open_ring_its_type& open_ring_its,
     r1->reverse();
     r1->join_backward(*r2);
   } else {
+    // Unreachable: m1 and m2 were paired by a shared location, so it is an
+    // endpoint of both rings -> one of the four cases above always matches.
     assert(false);
   }
   open_ring_its.erase(
@@ -212,7 +218,6 @@ proto_ring* assembly::find_enclosing_ring(node_ref_segment* segment) {
     return nullptr;
   }
   dbg("    Decided that this is an inner ring");
-  assert(!outer_rings.empty());
   std::stable_sort(outer_rings.rbegin(), outer_rings.rend());
   if (state_.debug) {
     for (auto const& o : outer_rings) {
@@ -227,7 +232,15 @@ proto_ring* assembly::find_enclosing_ring(node_ref_segment* segment) {
     }
   }
 
-  assert(!outer_rings.empty());
+  if (outer_rings.empty()) {
+    // Parity counted this as an inner ring, but no enclosing outer ring
+    // survived (all candidates belonged to inner rings, or cancelled out in
+    // remove_duplicates). Fall back to treating it as an outer ring rather
+    // than dereferencing an empty vector (the `assert` above is a no-op under
+    // NDEBUG). Prevents a crash on lakes-with-islands and similar geometries.
+    dbg("    No enclosing outer ring found -> treating as outer ring");
+    return nullptr;
+  }
   return outer_rings.front().ring_ptr();
 }
 
@@ -295,7 +308,7 @@ static void find_candidates(std::vector<candidate>& candidates,
 
   assert(connections.begin() != connections.end());
 
-  assert(!cand.rings.empty());
+  utl::verify(!cand.rings.empty(), "find_candidates: candidate has no rings");
   auto const* ring_leading_here = &cand.rings.back().first.ring();
   for (auto const& m : connections) {
     auto const& ring = m.ring();
@@ -348,7 +361,8 @@ static void find_candidates(std::vector<candidate>& candidates,
         }
         loc_done.push_back(c.stop_location);
         find_candidates(candidates, loc_done, xrings, c, depth + 1, debug);
-        assert(!loc_done.empty() && loc_done.back() == c.stop_location);
+        utl::verify(!loc_done.empty() && loc_done.back() == c.stop_location,
+                    "find_candidates: loc_done stack corrupted after recursion");
         loc_done.pop_back();
         if (debug) {
           std::cerr << "          ...back\n";
@@ -370,6 +384,7 @@ static void find_candidates(std::vector<candidate>& candidates,
  * returns false.
  */
 bool assembly::join_connected_rings(open_ring_its_type& open_ring_its) {
+  // Caller (create_rings_complex_case) only calls this when non-empty.
   assert(!open_ring_its.empty());
   dbg("    Trying to merge {} open rings (join_connected_rings)",
       open_ring_its.size());
@@ -458,7 +473,7 @@ bool assembly::join_connected_rings(open_ring_its_type& open_ring_its) {
 
 std::uint32_t assembly::add_new_ring_complex(const slocation& node) {
   auto* segment = &state_.segment_list[node.item];
-  assert(!segment->is_done());
+  assert(!segment->is_done());  // caller only starts a ring on an open segment
   dbg("  Starting new ring at location {},{} with segment {}",
       node.location(state_.segment_list).x(),
       node.location(state_.segment_list).y(), fmt::ptr(segment));
@@ -498,7 +513,7 @@ std::uint32_t assembly::add_new_ring_complex(const slocation& node) {
 
 std::uint32_t assembly::add_new_ring(const slocation& node) {
   auto* segment = &state_.segment_list[node.item];
-  assert(!segment->is_done());
+  assert(!segment->is_done());  // caller only starts a ring on an open segment
   dbg("  Starting new ring at location {},{} with segment {}",
       node.location(state_.segment_list).x(),
       node.location(state_.segment_list).y(), fmt::ptr(segment));

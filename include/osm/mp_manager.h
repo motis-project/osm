@@ -144,7 +144,6 @@ struct polygon_manager {
     }
 
     auto assemble = assembly{};
-    auto worked = false;
     auto r = relation{id, members};
 
     // Materialize temporary `way`s for each member so the assembler (which
@@ -177,7 +176,7 @@ struct polygon_manager {
       break;
     }
 
-    worked = assemble.assembling_area_from_relation(r, ways, a);
+    assemble.assembling_area_from_relation(r, ways, a);
 
     all_stats_ += a.pa_stats;
 
