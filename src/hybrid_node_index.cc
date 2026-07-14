@@ -311,7 +311,12 @@ void get_coords(
 }
 
 void update_locations_of_way(hybrid_node_idx const& nodes, osm::way& way) {
-  auto query = std::vector<std::pair<osm::object_id_type, osm::location*>>{};
+  // Reused per thread: this is called once per way (millions of times) and the
+  // vector is pure scratch (pointers into `way`'s own nodes), so there is no
+  // reason to re-allocate it every time.
+  static thread_local std::vector<std::pair<osm::object_id_type, osm::location*>>
+      query;
+  query.clear();
   query.reserve(way.nodes().size());
   for (auto& nr : way.nodes()) {
     query.emplace_back(nr.ref(), &nr.location());
@@ -326,48 +331,19 @@ void update_locations_of_way(hybrid_node_idx const& nodes, osm::way& way) {
   }
 }
 
-void prefetch_way_locations(hybrid_node_idx const& nodes, osm::way const& way) {
-  auto const& idx = nodes.impl_->idx_;
-  auto const& dat = nodes.impl_->dat_;
-  if (way.nodes().empty() || idx.empty()) {
-    return;
-  }
-
-  constexpr auto kReadaheadWindow = std::size_t{128U * 1024U};
-
-  auto addrs = std::array<char const*, 8U>{};
-  auto count = std::size_t{0U};
-  auto const* base = reinterpret_cast<char const*>(dat.data());
-
-  for (auto const& nr : way.nodes()) {
-    auto const id = std::abs(nr.ref());
-    auto const* it =
-        std::lower_bound(std::begin(idx), std::end(idx), id,
-                         [](auto const& o, auto const& i) { return o.id_ < i; });
-    if (it == std::begin(idx) && it->id_ != id) {
-      continue;
-    }
-    if (it == std::end(idx) || it->id_ != id) {
-      --it;
-    }
-    auto const* addr = base + it->block_offset_ + it->in_block_offset_;
-
-    if (count == 0U) {
-      addrs[count++] = addr;
-      continue;
-    }
-    auto const diff =
-        static_cast<std::size_t>(std::abs(addr - addrs[count - 1U]));
-    if (diff > kReadaheadWindow) {
-      if (count >= addrs.size()) {
-        break;
-      }
-      addrs[count++] = addr;
+void update_locations(hybrid_node_idx const& nodes, std::span<osm::way> ways) {
+  static thread_local std::vector<std::pair<osm::object_id_type, osm::location*>>
+      query;
+  query.clear();
+  for (auto& w : ways) {
+    for (auto& nr : w.nodes()) {
+      query.emplace_back(nr.ref(), &nr.location());
     }
   }
-
-  for (auto i = std::size_t{0U}; i < count; ++i) {
-    ::madvise(const_cast<char*>(addrs[i]), kReadaheadWindow, MADV_WILLNEED);
+  get_coords(nodes, query);
+  for (auto const& p : query) {
+    p.second->set_x(p.second->x() - hybrid_node_idx::x_offset);
+    p.second->set_y(p.second->y() - hybrid_node_idx::y_offset);
   }
 }
 

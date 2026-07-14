@@ -7,6 +7,7 @@
 
 #include "cista/hash.h"
 
+#include "utl/erase_duplicates.h"
 #include "utl/helpers/algorithm.h"
 
 #include "osm/assembler.h"
@@ -111,6 +112,22 @@ struct polygon_manager {
     osm_id_to_way_.reserve(expected_count);
   }
 
+  void index_relation_members() {
+    member_way_ids_.clear();
+    for (auto const& mp : mp_vec_) {
+      member_way_ids_.insert(end(member_way_ids_), begin(mp.ways_refs_),
+                             end(mp.ways_refs_));
+    }
+    utl::erase_duplicates(member_way_ids_);
+    members_indexed_ = true;
+    way_to_id_.reserve(member_way_ids_.size());
+    osm_id_to_way_.reserve(member_way_ids_.size());
+  }
+
+  bool is_relation_member(object_id_type const id) const {
+    return std::binary_search(begin(member_way_ids_), end(member_way_ids_), id);
+  }
+
   template <typename Tags>
   std::optional<polygon_area> save_ways(way way, Tags&& tags) {
     auto result = std::optional<polygon_area>{};
@@ -123,7 +140,9 @@ struct polygon_manager {
         result = a;
       }
     }
-    {
+
+    // Only ways referenced by an area are used assemble_area.
+    if (!members_indexed_ || is_relation_member(way.id)) {
       auto lock = std::lock_guard{ways_vec_mtx_};
       auto const idx =
           way_idx_t{static_cast<cista::base_t<way_idx_t>>(way_to_id_.size())};
@@ -131,6 +150,7 @@ struct polygon_manager {
       way_node_refs_.emplace_back(std::move(way.node_refs));
       osm_id_to_way_[way.id] = idx;
     }
+
     return result;
   }
 
@@ -194,6 +214,11 @@ struct polygon_manager {
   vector_map<way_idx_t, object_id_type> way_to_id_{};
   hash_map<object_id_type, way_idx_t> osm_id_to_way_{};
   std::atomic_uint64_t count_non_areas_{0};
+
+  // Sorted, deduplicated way ids that area relations reference; only these are
+  // stored in pass 2. Empty + `members_indexed_ == false` means "store all".
+  std::vector<object_id_type> member_way_ids_{};
+  bool members_indexed_{false};
 };
 
 }  // namespace osm

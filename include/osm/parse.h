@@ -19,6 +19,10 @@
 
 namespace osm {
 
+struct noop_flush {
+  void operator()(auto&) const noexcept {}
+};
+
 // Parse a .osm.pbf stream in parallel.
 //
 // `make_local` is invoked once per worker fiber to produce a fiber-local
@@ -29,9 +33,17 @@ namespace osm {
 // needs no synchronization.
 //
 // Handler signatures:
-//   on_node(Local&, std::int64_t id, geo::latlng const& pos, auto&& tags)
-//   on_way (Local&, std::int64_t id, auto&& refs,            auto&& tags)
-//   on_rel (Local&, std::int64_t id, auto&& members,         auto&& tags)
+//   on_node (Local&, std::int64_t id, geo::latlng const& pos, auto&& tags)
+//   on_way  (Local&, std::int64_t id, auto&& refs,            auto&& tags)
+//   on_rel  (Local&, std::int64_t id, auto&& members,         auto&& tags)
+//   on_flush(Local&)
+//
+// `on_flush` is invoked once per decoded PBF block on the fiber that decoded
+// it, right after all of that block's primitives have been handled. It lets a
+// handler buffer objects during the block and process them in a single batch
+// at the block boundary (e.g. to resolve all of a block's node locations with
+// one sorted index walk). Any `string_view`s handed to the primitive handlers
+// point into the block and stay valid until (and including) this call.
 //
 // `progress_consumer` is invoked with the cumulative number of input bytes
 // consumed so far; defaults to a no-op.
@@ -39,12 +51,14 @@ template <typename LocalFactory,
           typename NodeFn,
           typename WayFn,
           typename RelFn,
+          typename FlushFn = noop_flush,
           typename ProgressConsumer = utl::noop_progress_consumer>
 void parse_osm(raw_reader& r,
                LocalFactory&& make_local,
                NodeFn&& on_node,
                WayFn&& on_way,
                RelFn&& on_rel,
+               FlushFn&& on_flush = FlushFn{},
                ProgressConsumer&& progress_consumer = ProgressConsumer{},
                unsigned const n_threads = std::thread::hardware_concurrency(),
                unsigned const n_fibers = 0U) {
@@ -86,6 +100,7 @@ void parse_osm(raw_reader& r,
             [&](auto&&... a) {
               on_rel(local, std::forward<decltype(a)>(a)...);
             });
+        on_flush(local);
       }
     });
   }

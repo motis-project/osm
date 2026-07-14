@@ -68,17 +68,23 @@ public:
     } else {
       auto const size = group_.schedulers_.size();
       auto count = std::size_t{0};
-      static thread_local auto generator =
-          std::minstd_rand{std::random_device{}()};
-      auto distribution = std::uniform_int_distribution<std::uint32_t>{
-          0U, static_cast<std::uint32_t>(thread_count_ - 1U)};
+      // Cheap thread-local xorshift32 + Lemire multiply-shift bounded
+      // reduction: the idle steal loop runs this up to `size` times per
+      // `pick_next`, so avoiding std::uniform_int_distribution's rejection
+      // sampling (a measurable chunk of the scheduler's idle spin) matters.
+      static thread_local auto rng =
+          static_cast<std::uint32_t>(std::random_device{}()) | 1U;
       auto id = std::uint32_t{0};
       do {
         do {
           ++count;
           // random selection of one logical cpu;
           // prevent stealing from own scheduler.
-          id = distribution(generator);
+          rng ^= rng << 13;
+          rng ^= rng >> 17;
+          rng ^= rng << 5;
+          id = static_cast<std::uint32_t>(
+              (static_cast<std::uint64_t>(rng) * thread_count_) >> 32);
         } while (id == id_);
         victim = group_.schedulers_[id]->steal();
       } while (victim == nullptr && count < size);

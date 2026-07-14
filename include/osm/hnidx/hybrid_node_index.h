@@ -4,6 +4,7 @@
 #include <limits>
 #include <memory>
 #include <optional>
+#include <span>
 #include <string>
 #include <utility>
 #include <vector>
@@ -43,7 +44,7 @@ void get_coords(
 
 void update_locations_of_way(hybrid_node_idx const&, osm::way&);
 
-void prefetch_way_locations(hybrid_node_idx const&, osm::way const&);
+void update_locations(hybrid_node_idx const&, std::span<osm::way>);
 
 // Encoded representation of a single PBF block's node positions. Each
 // block is self-contained: every coord-span starts with absolute (fixed)

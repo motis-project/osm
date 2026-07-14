@@ -50,9 +50,9 @@ TEST(a, b) {
         ++n_rels;
         mp_manager.save_ways_of_relation(id, members, tags);
       },
-      pt->update_fn());
+      osm::noop_flush{}, pt->update_fn());
 
-  mp_manager.reserve_way_map(static_cast<std::size_t>(n_ways.load()));
+  mp_manager.index_relation_members();
   r.reset();
 
   // PASS 2: rebuild ways with locations -> mp_manager; assemble areas from
@@ -87,7 +87,7 @@ TEST(a, b) {
           ++n_areas;
         }
       },
-      pt->update_fn());
+      osm::noop_flush{}, pt->update_fn());
 
   std::cout << "ways: " << n_ways << "\n"
             << "relations: " << n_rels << "\n"
