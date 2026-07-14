@@ -6,7 +6,6 @@
 #include <array>
 #include <cstdint>
 #include <cstring>
-#include <iostream>
 #include <iterator>
 #include <limits>
 #include <string>
@@ -524,11 +523,7 @@ struct hybrid_block_merger::impl {
     global_coords_written_ += block.total_coords_;
   }
 
-  void finish() {
-    std::cerr << "hybrid_node_idx: dat=" << dat_.size()
-              << " B, idx=" << (idx_.size() * sizeof(id_offset)) << " B ("
-              << idx_.size() << " entries)" << std::endl;
-  }
+  void finish() {}
 
   cista::basic_mmap_vec<id_offset, std::uint64_t>& idx_;
   cista::basic_mmap_vec<char, std::uint64_t>& dat_;

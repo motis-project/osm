@@ -21,7 +21,7 @@
 [boost]
   url=git@github.com:motis-project/boost.git
   branch=boost-1.89.0
-  commit=014fd3e9397cc84e16177f5187d6aa2180a9ddc2
+  commit=f9db04545076892543821d85a80f59aedf93a794
 [geo]
   url=git@github.com:motis-project/geo.git
   branch=master
