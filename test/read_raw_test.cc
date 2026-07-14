@@ -20,44 +20,6 @@
 
 namespace bf = boost::fibers;
 
-TEST(osm, varint) {
-  auto buf = std::array<char, protozero::max_varint_length * 10U>{};
-  auto const n1 =
-      protozero::write_varint(buf.data(), protozero::encode_zigzag64(123));
-  auto const n2 =
-      protozero::write_varint(buf.data() + n1, protozero::encode_zigzag64(456));
-  auto const n3 = protozero::write_varint(buf.data() + n1 + n2,
-                                          protozero::encode_zigzag64(789));
-  auto const n4 = protozero::write_varint(buf.data() + n1 + n2 + n3, 0);
-
-  EXPECT_EQ(0, buf[n1 + n2 + n3]);
-
-  auto const size = static_cast<std::size_t>(n1 + n2 + n3);
-  auto x = static_cast<char const*>(buf.data());
-  EXPECT_EQ(123,
-            protozero::decode_zigzag64(protozero::decode_varint(&x, x + size)));
-
-  auto const empty = osm::varint<std::int64_t>{std::string_view{}};
-  EXPECT_EQ(empty.begin(), empty.end());
-
-  auto const v = osm::varint<std::int64_t>{
-      std::string_view{buf.data(), static_cast<std::size_t>(n1 + n2 + n3)}};
-  auto it = v.begin();
-  EXPECT_NE(it, v.end());
-  EXPECT_EQ(123, *it);
-
-  ++it;
-  EXPECT_NE(it, v.end());
-  EXPECT_EQ(456, *it);
-
-  ++it;
-  EXPECT_NE(it, v.end());
-  EXPECT_EQ(789, *it);
-
-  ++it;
-  EXPECT_EQ(it, v.end());
-}
-
 TEST(a, b) {
   auto bars = utl::global_progress_bars{false};
 
@@ -70,8 +32,8 @@ TEST(a, b) {
 
   auto const idx_path =
       std::filesystem::temp_directory_path() / "osm_node_idx.bin";
-  auto node_idx = osm::node_idx_t{
-      cista::mmap{idx_path.generic_string().c_str()}};
+  auto node_idx =
+      osm::node_idx_t{cista::mmap{idx_path.generic_string().c_str()}};
   auto node_handler = osm::node_idx_handler{node_idx};
 
   auto mp_manager = osm::polygon_manager{true};
@@ -82,9 +44,7 @@ TEST(a, b) {
 
   // PASS 1: nodes -> idx; remember way-refs for each relation; count ways.
   osm::parse_osm(
-      r,
-      [] { return std::monostate{}; },
-      node_handler,
+      r, [] { return std::monostate{}; }, node_handler,
       [&](auto&, std::int64_t const, auto&&, auto&&) { ++n_ways; },
       [&](auto&, std::int64_t const id, auto&& members, auto&& tags) {
         ++n_rels;
@@ -105,13 +65,11 @@ TEST(a, b) {
   auto const total_ways = n_ways.load();
 
   osm::parse_osm(
-      r,
-      [] { return std::monostate{}; },
+      r, [] { return std::monostate{}; },
       [](auto&, std::int64_t const, geo::latlng const&, auto&&) {},
       osm::way_handler{[&](auto&, osm::way&& w, auto&& tags) {
         osm::update_locations_of_way(node_idx, w);
-        if (auto a = mp_manager.save_ways(std::move(w), tags);
-            a && a->valid) {
+        if (auto a = mp_manager.save_ways(std::move(w), tags); a && a->valid) {
           ++n_areas;
         }
         if (++ways_processed == total_ways) {

@@ -12,39 +12,49 @@ namespace osm {
 template <typename T = std::int64_t, bool Delta = false>
 struct varint {
   struct iterator {
+    using iterator_concept = std::forward_iterator_tag;
     using iterator_category = std::forward_iterator_tag;
     using difference_type = std::ptrdiff_t;
     using value_type = std::int64_t;
-    using pointer = std::int64_t*;
+    using pointer = std::int64_t const*;
     using reference = std::int64_t const&;
 
-    enum class state : std::uint8_t { kFirst, kMid, kLast, kFin };
-
     iterator() = default;
-    explicit iterator(std::string_view d)
-        : data_(d), state_{d.empty() ? state::kFin : state::kFirst} {}
-
-    reference operator*() const {
-      if (state_ == state::kFirst) {
-        ++(*const_cast<iterator*>(this));
+    explicit iterator(std::string_view const d) : pos_{d} {
+      if (pos_.empty()) {
+        pos_ = {};  // past-the-end iterator
+      } else {
+        decode();
       }
-      return value_;
     }
 
+    reference operator*() const { return value_; }
+    pointer operator->() const { return &value_; }
+
     iterator& operator++() {
-      if (state_ == state::kLast) {
-        state_ = state::kFin;
-        return *this;
+      pos_ = next_;
+      if (pos_.empty()) {
+        pos_ = {};  // canonical past-the-end position
+      } else {
+        decode();
       }
-      if (data_.empty()) {
-        state_ = state::kLast;
-        return *this;
-      }
-      if (state_ == state::kFirst) {
-        state_ = state::kMid;
-      }
-      auto start = data_.data();
-      auto const end = start + data_.size();
+      return *this;
+    }
+
+    iterator operator++(int) {
+      auto const tmp = *this;
+      ++(*this);
+      return tmp;
+    }
+
+    friend bool operator==(iterator const& a, iterator const& b) {
+      return a.pos_.data() == b.pos_.data() && a.pos_.size() == b.pos_.size();
+    }
+
+  private:
+    void decode() {
+      auto start = pos_.data();
+      auto const end = start + pos_.size();
       auto const prev = value_;
       auto const x = protozero::decode_varint(&start, end);
       if constexpr (std::is_signed_v<T>) {
@@ -60,30 +70,12 @@ struct varint {
       if constexpr (Delta) {
         value_ += prev;
       }
-      data_ = {start, end};
-      if (data_.empty()) {
-        state_ = state::kLast;
-      }
-      return *this;
+      next_ = std::string_view{start, static_cast<std::size_t>(end - start)};
     }
 
-    iterator operator++(int) {
-      iterator tmp = *this;
-      ++(*this);
-      return tmp;
-    }
-
-    friend bool operator==(iterator const& a, iterator const& b) {
-      return a.state_ == b.state_;
-    }
-
-    friend bool operator!=(iterator const& a, iterator const& b) {
-      return !(a == b);
-    }
-
-    std::string_view data_{};
-    value_type value_{0U};
-    state state_{state::kFin};
+    std::string_view pos_{};  // bytes from the current element on; {} == end
+    std::string_view next_{};  // bytes after the current element (cached)
+    value_type value_{0};
   };
 
   iterator begin() const { return iterator{data_}; }

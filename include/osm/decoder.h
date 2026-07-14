@@ -11,6 +11,7 @@
 #include "utl/verify.h"
 #include "utl/zip.h"
 
+#include "osm/ranges_chunk.h"
 #include "osm/tags.h"
 #include "osm/types.h"
 #include "osm/varint.h"

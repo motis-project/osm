@@ -1,11 +1,11 @@
 #pragma once
 
-#include <atomic>
-#include <barrier>
 #include <chrono>
 #include <condition_variable>
 #include <cstddef>
 #include <cstdint>
+#include <atomic>
+#include <barrier>
 #include <mutex>
 #include <random>
 #include <vector>
@@ -23,25 +23,15 @@ namespace osm {
 
 class work_stealing;
 
-// Per-`parse_osm`-call state shared across all `work_stealing` schedulers in
-// the pool. Replaces the upstream `static` state in
-// `boost::fibers::algo::work_stealing` so multiple calls to
-// `use_scheduling_algorithm<work_stealing>` in the same process don't alias
-// or use-after-free. Group lifetime must extend past all participating
-// threads.
 struct work_stealing_group {
-  explicit work_stealing_group(std::uint32_t const n)
-      : schedulers_(n, nullptr), barrier_(n) {}
+  explicit work_stealing_group(std::uint32_t n);
+  ~work_stealing_group();
 
   std::atomic<std::uint32_t> counter_{0U};
   std::vector<boost::intrusive_ptr<work_stealing>> schedulers_;
   std::barrier<> barrier_;
 };
 
-// Direct copy of `boost::fibers::algo::work_stealing` with the static
-// counter / scheduler vector / thread barrier replaced by per-call
-// `work_stealing_group` state. Per-thread ready queues with random victim
-// stealing — same scheduling semantics as upstream.
 class work_stealing : public boost::fibers::algo::algorithm {
 public:
   work_stealing(work_stealing_group& group,
@@ -70,8 +60,8 @@ public:
   boost::fibers::context* pick_next() noexcept override {
     auto* victim = rqueue_.pop();
     if (victim != nullptr) {
-      boost::context::detail::prefetch_range(
-          victim, sizeof(boost::fibers::context));
+      boost::context::detail::prefetch_range(victim,
+                                             sizeof(boost::fibers::context));
       if (!victim->is_context(boost::fibers::type::pinned_context)) {
         boost::fibers::context::active()->attach(victim);
       }
@@ -93,8 +83,8 @@ public:
         victim = group_.schedulers_[id]->steal();
       } while (victim == nullptr && count < size);
       if (victim != nullptr) {
-        boost::context::detail::prefetch_range(
-            victim, sizeof(boost::fibers::context));
+        boost::context::detail::prefetch_range(victim,
+                                               sizeof(boost::fibers::context));
         boost::fibers::context::active()->attach(victim);
       }
     }
@@ -105,8 +95,8 @@ public:
 
   bool has_ready_fibers() const noexcept override { return !rqueue_.empty(); }
 
-  void suspend_until(std::chrono::steady_clock::time_point const& time_point)
-      noexcept override {
+  void suspend_until(std::chrono::steady_clock::time_point const&
+                         time_point) noexcept override {
     if (!suspend_) {
       return;
     }
@@ -133,15 +123,16 @@ private:
   work_stealing_group& group_;
   std::uint32_t id_;
   std::uint32_t thread_count_;
-  // The spinlock-protected queue's brief contention on `steal()` doubles as a
-  // natural backoff for empty-stealing — replacing it with the lock-free
-  // SPMC queue removed the backoff and turned `pick_next` into a busy spin
-  // when all queues were drained.
   boost::fibers::detail::context_spinlock_queue rqueue_{};
   std::mutex mtx_{};
   std::condition_variable cnd_{};
   bool flag_{false};
   bool suspend_;
 };
+
+inline work_stealing_group::work_stealing_group(std::uint32_t const n)
+    : schedulers_(n, nullptr), barrier_(n) {}
+
+inline work_stealing_group::~work_stealing_group() = default;
 
 }  // namespace osm
