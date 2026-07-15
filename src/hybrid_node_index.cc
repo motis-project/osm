@@ -1,7 +1,9 @@
 #include "osm/hnidx/hybrid_node_index.h"
 
+#ifndef _WIN32
 #include <sys/mman.h>
 #include <unistd.h>
+#endif
 #include <algorithm>
 #include <array>
 #include <cstdint>

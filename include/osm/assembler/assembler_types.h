@@ -688,9 +688,10 @@ struct area_pair {
     if (offsets.empty()) {
       return {};
     }
-    auto const start = std::size_t{offsets[0]};
-    auto const end =
-        std::size_t{(offsets.size() > 1) ? offsets[1] : area_part.size()};
+    auto const start = static_cast<std::size_t>(offsets[0]);
+    auto const end = static_cast<std::size_t>(
+        (offsets.size() > 1) ? offsets[1]
+                             : static_cast<std::int64_t>(area_part.size()));
     return {area_part.data() + start, end - start};
   }
 
@@ -698,9 +699,11 @@ struct area_pair {
     if (offsets.size() <= i + 1) {
       return {};
     }
-    auto const start = std::size_t{offsets[i + 1]};
-    auto const end = std::size_t{(i + 2 < offsets.size()) ? offsets[i + 2]
-                                                          : area_part.size()};
+    auto const start = static_cast<std::size_t>(offsets[i + 1]);
+    auto const end = static_cast<std::size_t>(
+        (i + 2 < offsets.size())
+            ? offsets[i + 2]
+            : static_cast<std::int64_t>(area_part.size()));
     return {area_part.data() + start, end - start};
   }
 
@@ -708,8 +711,8 @@ struct area_pair {
     if (offsets.size() <= 1) {
       return {};
     }
-    auto const start = std::size_t{offsets[1]};
-    auto const end = std::size_t{area_part.size()};
+    auto const start = static_cast<std::size_t>(offsets[1]);
+    auto const end = area_part.size();
     return {area_part.data() + start, end - start};
   }
 
