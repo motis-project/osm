@@ -104,6 +104,7 @@ struct polygon_manager {
     }
 
     std::lock_guard<std::mutex> lock(mp_vec_mtx_);
+    mp_index_.emplace(id, mp_vec_.size());
     mp_vec_.emplace_back(std::move(mp));
   }
 
@@ -172,10 +173,8 @@ struct polygon_manager {
     // way for the duration of this call.
     auto ways_storage = std::vector<way>{};
     auto ways = std::vector<way const*>{};
-    for (auto const& mp : mp_vec_) {
-      if (mp.relation_id_ != id) {
-        continue;
-      }
+    if (auto const mit = mp_index_.find(id); mit != mp_index_.end()) {
+      auto const& mp = mp_vec_[mit->second];
       ways_storage.reserve(mp.ways_refs_.size());
       for (auto const osm_id : mp.ways_refs_) {
         auto const it = osm_id_to_way_.find(osm_id);
@@ -208,6 +207,7 @@ struct polygon_manager {
 
   std::mutex mp_vec_mtx_;
   std::vector<multi_polygon> mp_vec_{};
+  hash_map<object_id_type, std::size_t> mp_index_{};  // relation id -> mp_vec_
 
   std::mutex ways_vec_mtx_;
   vecvec<way_idx_t, node_ref> way_node_refs_{};

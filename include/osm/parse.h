@@ -6,6 +6,7 @@
 #include <string>
 #include <string_view>
 #include <thread>
+#include <type_traits>
 #include <vector>
 
 #include "boost/fiber/all.hpp"
@@ -21,6 +22,11 @@ namespace osm {
 
 struct noop_flush {
   void operator()(auto&) const noexcept {}
+};
+
+// Pass as `on_node` / `on_way` / `on_rel` to skip decoding that primitive type.
+struct skip {
+  void operator()(auto&&...) const noexcept {}
 };
 
 // Parse a .osm.pbf stream in parallel.
@@ -64,6 +70,11 @@ void parse_osm(raw_reader& r,
                unsigned const n_fibers = 0U) {
   namespace bf = boost::fibers;
 
+  // A handler passed as `skip` means "don't decode this primitive type".
+  constexpr auto read_nodes = !std::is_same_v<std::decay_t<NodeFn>, skip>;
+  constexpr auto read_ways = !std::is_same_v<std::decay_t<WayFn>, skip>;
+  constexpr auto read_relations = !std::is_same_v<std::decay_t<RelFn>, skip>;
+
   // Default to one fiber per thread. Pass a larger `n_fibers` (e.g. 4× the
   // thread count) to oversubscribe — useful when handlers prefetch+sleep
   // and would otherwise leave OS threads spinning in `pick_next` while the
@@ -90,7 +101,7 @@ void parse_osm(raw_reader& r,
         out.resize(b.raw_size_);
         decompressor.decompress(b.compressed_, out);
         decode_primitive(
-            out, strings, true, true, true,
+            out, strings, read_nodes, read_ways, read_relations,
             [&](auto&&... a) {
               on_node(local, std::forward<decltype(a)>(a)...);
             },
