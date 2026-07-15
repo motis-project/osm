@@ -192,7 +192,6 @@ struct polygon_manager {
         ways.push_back(&w);
       }
       utl::sort(ways, [](way const* a, way const* b) { return a->id < b->id; });
-      break;
     }
 
     assemble.assembling_area_from_relation(r, ways, a);
