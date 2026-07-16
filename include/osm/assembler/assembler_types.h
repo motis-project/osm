@@ -47,14 +47,24 @@ using open_ring_its_type = std::list<std::list<proto_ring>::iterator>;
  * beginning of the segment. Smaller, in this case, means smaller
  * x coordinate, and, if they are the same, smaller y coordinate.
  */
+// The ring assembly sweep requires libosmium's location ordering: smaller
+// means smaller x (lng) coordinate, ties broken by smaller y (lat).
+// geo::fixed_latlng::operator< compares lat first and MUST NOT be used for
+// any ordering the sweep depends on.
+constexpr bool location_less(location const& a, location const& b) noexcept {
+  return a.x() == b.x() ? a.y() < b.y() : a.x() < b.x();
+}
+
 struct node_ref_segment {
   node_ref_segment() noexcept = default;
   node_ref_segment(const node_ref& nr1,
                    const node_ref& nr2,
                    role_type role,
                    const way* way) noexcept
-      : first_noderef_{nr1.location() < nr2.location() ? nr1 : nr2},
-        second_noderef_{nr1.location() < nr2.location() ? nr2 : nr1},
+      : first_noderef_{location_less(nr1.location(), nr2.location()) ? nr1
+                                                                       : nr2},
+        second_noderef_{location_less(nr1.location(), nr2.location()) ? nr2
+                                                                       : nr1},
         way_{way},
         role_{role} {}
 
@@ -134,7 +144,7 @@ struct node_ref_segment {
       }
       return a > b;
     }
-    return first_noderef_.location() < other.first().location();
+    return location_less(first_noderef_.location(), other.first().location());
   }
 
   node_ref first_noderef_;
@@ -239,7 +249,7 @@ inline location calculate_intersection(const node_ref_segment& s1,
         {1, s2.second().location()},
     }};
     std::sort(sl.begin(), sl.end(), [](const seg_loc& lhs, const seg_loc& rhs) {
-      return lhs.location < rhs.location;
+      return location_less(lhs.location, rhs.location);
     });
     if (sl[1].location == sl[2].location) {
       return location{};
@@ -612,7 +622,7 @@ struct location_to_ring_map {
     return location == other.location;
   }
   bool operator<(const location_to_ring_map& other) const {
-    return location < other.location;
+    return location_less(location, other.location);
   }
 
   location location;

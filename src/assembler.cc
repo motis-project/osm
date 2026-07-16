@@ -38,8 +38,8 @@ node_ref_segment* assembly::get_next_segment(const location& location) {
   auto it = std::lower_bound(
       state_.slocations.begin(), state_.slocations.end(), slocation{},
       [&location, this](const slocation& lhs, const slocation& rhs) {
-        return lhs.location(state_.segment_list, location) <
-               rhs.location(state_.segment_list, location);
+        return location_less(lhs.location(state_.segment_list, location),
+                             rhs.location(state_.segment_list, location));
       });
 
   utl::verify(it != state_.slocations.end(),
@@ -676,8 +676,8 @@ bool assembly::create_rings() {
   }
   std::stable_sort(state_.slocations.begin(), state_.slocations.end(),
                    [this](slocation const& lhs, slocation const& rhs) {
-                     return lhs.location(state_.segment_list) <
-                            rhs.location(state_.segment_list);
+                     return location_less(lhs.location(state_.segment_list),
+                                          rhs.location(state_.segment_list));
                    });
   // Find all locations where more than two segments start or
   // end. We call those "split" locations. If there are any

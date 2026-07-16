@@ -26,3 +26,7 @@
   url=git@github.com:motis-project/geo.git
   branch=master
   commit=cf38581dcb2a7ddaf9c96a3cb147a44f89893952
+[osmium]
+  url=git@github.com:motis-project/libosmium.git
+  branch=master
+  commit=aec81a466451d5c6913df503e543806129df02d1

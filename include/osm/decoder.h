@@ -32,7 +32,7 @@ struct meta_data {
   std::int64_t lon_offset_;
 };
 
-void decode_string_table(std::string_view s,
+inline void decode_string_table(std::string_view s,
                          std::vector<std::string_view>& strings) {
   auto pbf_string_table = protozero::pbf_message<tag::string_table>{s};
   while (pbf_string_table.next(tag::string_table::kRepeatedBytesS,
@@ -43,7 +43,7 @@ void decode_string_table(std::string_view s,
   }
 }
 
-meta_data decode_primitive_block_metadata(
+inline meta_data decode_primitive_block_metadata(
     std::string_view s, std::vector<std::string_view>& strings) {
   auto m = meta_data{};
   auto pbf_primitive_block = protozero::pbf_message<tag::primitive_block>{s};

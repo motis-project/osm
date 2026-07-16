@@ -9,7 +9,7 @@ file(GLOB_RECURSE osm-files src/*.cc)
 add_library(osm ${osm-files})
 target_compile_features(osm PUBLIC cxx_std_23)
 target_include_directories(osm SYSTEM PUBLIC include ${CMAKE_CURRENT_BINARY_DIR}/generated)
-target_link_libraries(osm protozero cista utl geo zlibstatic Boost::fiber unordered_dense)
+target_link_libraries(osm protozero cista utl geo zlibstatic Boost::fiber unordered_dense osmium)
 
 
 # --- TESTS ---
