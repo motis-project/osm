@@ -283,8 +283,8 @@ void decode_relation(std::string_view s,
       });
   auto const members =
       zip(refs, roles, types) | transform([&](auto&& x) {
-        auto const [ref, role, type] = x;
-        return std::tuple{ref, strings.at(role), member_type{type}};
+        return std::tuple{get<0>(x), strings.at(get<1>(x)),
+                          static_cast<member_type>(get<2>(x))};
       });
   f(id, members, tags);
 }
