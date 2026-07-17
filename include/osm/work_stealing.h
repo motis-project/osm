@@ -5,9 +5,9 @@
 #include <cstddef>
 #include <cstdint>
 #include <atomic>
-#include <barrier>
 #include <mutex>
 #include <random>
+#include <thread>
 #include <vector>
 
 #include "boost/intrusive_ptr.hpp"
@@ -27,9 +27,25 @@ struct work_stealing_group {
   explicit work_stealing_group(std::uint32_t n);
   ~work_stealing_group();
 
+  // One-shot startup barrier. Intentionally NOT std::barrier: libstdc++
+  // implements it on futex-based atomic waiting, which deadlocks under
+  // valgrind's scheduler. mutex + condition_variable is handled correctly
+  // and this is a one-time startup synchronization, not a hot path.
+  void arrive_and_wait() {
+    auto lk = std::unique_lock{mtx_};
+    if (++arrived_ == expected_) {
+      cv_.notify_all();
+    } else {
+      cv_.wait(lk, [&]() { return arrived_ >= expected_; });
+    }
+  }
+
   std::atomic<std::uint32_t> counter_{0U};
   std::vector<boost::intrusive_ptr<work_stealing>> schedulers_;
-  std::barrier<> barrier_;
+  std::mutex mtx_;
+  std::condition_variable cv_;
+  std::uint32_t expected_;
+  std::uint32_t arrived_{0U};
 };
 
 class work_stealing : public boost::fibers::algo::algorithm {
@@ -42,7 +58,7 @@ public:
         thread_count_{thread_count},
         suspend_{suspend} {
     group_.schedulers_[id_] = this;
-    group_.barrier_.arrive_and_wait();
+    group_.arrive_and_wait();
   }
 
   work_stealing(work_stealing const&) = delete;
@@ -88,7 +104,13 @@ public:
         } while (id == id_);
         victim = group_.schedulers_[id]->steal();
       } while (victim == nullptr && count < size);
-      if (victim != nullptr) {
+      if (victim == nullptr) {
+        // Idle: a full steal sweep found nothing. Yield the OS thread so
+        // that serializing schedulers (valgrind!) give the threads that
+        // actually have work a chance to run; without this, spinning
+        // dispatchers can starve them into a livelock.
+        std::this_thread::yield();
+      } else {
         boost::context::detail::prefetch_range(victim,
                                                sizeof(boost::fibers::context));
         boost::fibers::context::active()->attach(victim);
@@ -137,7 +159,7 @@ private:
 };
 
 inline work_stealing_group::work_stealing_group(std::uint32_t const n)
-    : schedulers_(n, nullptr), barrier_(n) {}
+    : schedulers_(n, nullptr), expected_{n} {}
 
 inline work_stealing_group::~work_stealing_group() = default;
 
