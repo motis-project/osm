@@ -565,8 +565,8 @@ bool assembly::create_rings_complex_case() {
     auto const locs = make_range(std::equal_range(
         state_.slocations.begin(), state_.slocations.end(), slocation{},
         [&location, this](const slocation& lhs, const slocation& rhs) {
-          return lhs.location(state_.segment_list, location) <
-                 rhs.location(state_.segment_list, location);
+          return location_less(lhs.location(state_.segment_list, location),
+                               rhs.location(state_.segment_list, location));
         }));
     for (auto& loc : locs) {
       if (!state_.segment_list[loc.item].is_done()) {
@@ -724,10 +724,11 @@ bool assembly::create_rings() {
       auto const it = std::lower_bound(
           state_.slocations.cbegin(), state_.slocations.cend(), slocation{},
           [this, &location](slocation const& lhs, slocation const& rhs) {
-            return lhs.location(state_.segment_list, location) <
-                   rhs.location(state_.segment_list, location);
+            return location_less(lhs.location(state_.segment_list, location),
+                                 rhs.location(state_.segment_list, location));
           });
-      assert(it != state_.slocations.cend());
+      utl::verify(it != state_.slocations.cend(),
+                  "create_rings: split location not found");
       auto const id = it->node_ref(state_.segment_list).ref();
       state_.problem_reporter.report_touching_ring(id, location);
       dbg("    {},{}", location.x(), location.y());
