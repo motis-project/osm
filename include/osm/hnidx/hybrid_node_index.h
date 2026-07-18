@@ -24,6 +24,14 @@ struct hybrid_node_idx {
   static constexpr auto y_offset = 90 * geo::fixed_latlng::kCoordinatePrecision;
 
   hybrid_node_idx(cista::mmap idx_mmap, cista::mmap dat_mmap);
+
+  // Convenience ctor: index and data are anonymous temp files (O_TMPFILE)
+  // created in `directory`.
+  explicit hybrid_node_idx(std::string const& directory)
+      : hybrid_node_idx{
+            cista::mmap{directory.c_str(), cista::mmap::protection::TMPFILE},
+            cista::mmap{directory.c_str(), cista::mmap::protection::TMPFILE}} {}
+
   ~hybrid_node_idx();
 
   hybrid_node_idx(hybrid_node_idx const&) = delete;

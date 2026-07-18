@@ -24,11 +24,6 @@ struct noop_flush {
   void operator()(auto&) const noexcept {}
 };
 
-// Pass as `on_node` / `on_way` / `on_rel` to skip decoding that primitive type.
-struct skip {
-  void operator()(auto&&...) const noexcept {}
-};
-
 // Parse a .osm.pbf stream in parallel.
 //
 // `make_local` is invoked once per worker fiber to produce a fiber-local

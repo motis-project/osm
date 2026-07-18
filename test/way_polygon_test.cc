@@ -78,9 +78,7 @@ inline double compute_area(const std::vector<Point>& ring) {
 }
 
 TEST(way_tests, way_areas_monaco) {
-  auto r = osm::raw_reader{
-      .file_ = cista::mmap{"/home/tmir/OSM/berlin-251113.osm.pbf",
-                           cista::mmap::protection::READ}};
+  auto r = osm::raw_reader{"/home/tmir/OSM/berlin-251113.osm.pbf"};
 
   auto bars = utl::global_progress_bars{false};
   auto pt = utl::activate_progress_tracker("parse");

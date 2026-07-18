@@ -21,6 +21,13 @@ namespace osm {
 constexpr auto const kMaxStringLength = 256U * 4U;
 constexpr auto const kNanoDegree = 1'000'000'000.0;
 
+// Pass as `on_node` / `on_way` / `on_rel` to a parse driver to skip decoding
+// that primitive type. The driver detects this sentinel at compile time and
+// clears the corresponding `read_*` flag it hands to `decode_primitive`.
+struct skip {
+  void operator()(auto&&...) const noexcept {}
+};
+
 struct meta_data {
   geo::latlng to_latlng(std::int64_t const lat, std::int64_t const lon) const {
     return {(lat_offset_ + lat * granularity_) / kNanoDegree,

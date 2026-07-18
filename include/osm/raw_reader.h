@@ -3,6 +3,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <optional>
+#include <string>
 #include <string_view>
 
 #include "cista/mmap.h"
@@ -15,6 +16,10 @@ struct buf {
 };
 
 struct raw_reader {
+  // Opens `path` read-only and hints the kernel that the file will be read
+  // strictly forward (sequential readahead, drop pages behind the cursor).
+  explicit raw_reader(std::string const& path);
+
   std::optional<buf> read();
 
   void reset() noexcept;

@@ -23,9 +23,7 @@ namespace bf = boost::fibers;
 TEST(a, b) {
   auto bars = utl::global_progress_bars{false};
 
-  auto r = osm::raw_reader{
-      .file_ = cista::mmap{"/home/felix/Downloads/germany-latest.osm.pbf",
-                           cista::mmap::protection::READ}};
+  auto r = osm::raw_reader{"/home/felix/Downloads/germany-latest.osm.pbf"};
 
   auto pt = utl::activate_progress_tracker("parse");
   pt->in_high(r.rest_.size() * 2U);

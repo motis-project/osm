@@ -1,6 +1,11 @@
 #include "osm/raw_reader.h"
 
+#include <cstdint>
 #include <cstring>
+
+#ifndef _WIN32
+#include <sys/mman.h>
+#endif
 
 #include "protozero/pbf_message.hpp"
 #include "protozero/types.hpp"
@@ -15,6 +20,16 @@ namespace osm {
 
 constexpr auto const kMaxBlobHeaderSize = 64U * 1024U;
 constexpr auto const kMaxUncompressedBlobSize = 32U * 1024U * 1024U;
+
+raw_reader::raw_reader(std::string const& path)
+    : file_{path.c_str(), cista::mmap::protection::READ} {
+  // All passes read the PBF strictly forward: hint the kernel to ramp up
+  // readahead and evict pages behind the cursor.
+#ifdef MADV_SEQUENTIAL
+  ::madvise(const_cast<std::uint8_t*>(file_.data()), file_.size(),
+            MADV_SEQUENTIAL);
+#endif
+}
 
 std::optional<buf> raw_reader::read() {
   if (rest_.empty()) {
