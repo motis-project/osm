@@ -129,7 +129,7 @@ void decode_dense_nodes(std::string_view s,
         varint<std::uint32_t>{separator_pos == std::string_view::npos
                                   ? std::string_view{}
                                   : tags.substr(0, separator_pos)} |
-        std::views::chunk(2) | std::views::transform([&](auto&& y) {
+        osm::chunk(2) | std::views::transform([&](auto&& y) {
           auto it = std::ranges::begin(y);
           auto const k = *it;
           auto const v = *++it;

@@ -1,34 +1,27 @@
 #pragma once
 
-// Minimal drop-in replacement for std::views::chunk (P2442R1).
+// Lightweight input-range chunk view for the single shape
+// osm::decode_dense_nodes (osm/decoder.h) needs:
 //
-// Some standard libraries (notably libc++ as of clang 21) do not yet ship
-// std::ranges::chunk_view / std::views::chunk. This header provides a small,
-// self-contained substitute that is *only* activated when the standard
-// library does not advertise the feature via __cpp_lib_ranges_chunk. When the
-// real facility is available, this header is empty and std::views::chunk is
-// used unchanged.
+//     range | osm::chunk(n) | std::views::transform(...)
 //
-// The implementation covers just what osm::decode_dense_nodes (osm/decoder.h)
-// needs:
-//
-//     range | std::views::chunk(n) | std::views::transform(...)
-//
-// i.e. a const-iterable view that groups the elements of a forward source
-// range into consecutive chunks of at most `n` elements. It intentionally does
-// not model the sized / random-access / bidirectional refinements of the
-// standard view.
-
-#include <version>
-
-#if !defined(__cpp_lib_ranges_chunk)
+// Used in place of std::views::chunk (P2442R1) *unconditionally*, on every
+// standard library, because:
+//   - libc++ (clang 21) does not ship std::views::chunk yet, and
+//   - MSVC's std::ranges::chunk_view is pathologically slow to instantiate
+//     (minutes -- effectively hanging the build); it was previously selected on
+//     MSVC because the compat below only kicked in when __cpp_lib_ranges_chunk
+//     was undefined.
+// This minimal version models only a const-iterable input range (not the
+// sized / random-access / bidirectional refinements of the standard view) and
+// compiles quickly everywhere.
 
 #include <iterator>
 #include <ranges>
 #include <type_traits>
 #include <utility>
 
-namespace osm::ranges_chunk_compat {
+namespace osm {
 
 template <std::ranges::view V>
   requires std::ranges::input_range<V> && std::ranges::input_range<V const>
@@ -141,13 +134,6 @@ struct chunk_fn {
   }
 };
 
-}  // namespace osm::ranges_chunk_compat
+inline constexpr chunk_fn chunk{};
 
-// The one intrusive part: decoder.h calls std::views::chunk unchanged, so the
-// name has to resolve there. std::views is an alias for std::ranges::views;
-// inject the adaptor object only on standard libraries that lack it.
-namespace std::ranges::views {
-inline constexpr ::osm::ranges_chunk_compat::chunk_fn chunk{};
-}  // namespace std::ranges::views
-
-#endif  // !defined(__cpp_lib_ranges_chunk)
+}  // namespace osm
