@@ -95,16 +95,22 @@ void parse_osm(raw_reader& r,
       for (auto const& b : ch) {
         out.resize(b.raw_size_);
         decompressor.decompress(b.compressed_, out);
-        decode_primitive(
-            out, strings, read_nodes, read_ways, read_relations,
-            [&](auto&&... a) {
-              on_node(local, std::forward<decltype(a)>(a)...);
+        decode_primitive<read_nodes, read_ways, read_relations>(
+            out, strings,
+            [&](auto&& a, auto&& b, auto&& c) {
+              on_node(local, std::forward<decltype(a)>(a),
+                      std::forward<decltype(b)>(b),
+                      std::forward<decltype(c)>(c));
             },
-            [&](auto&&... a) {
-              on_way(local, std::forward<decltype(a)>(a)...);
+            [&](auto&& a, auto&& b, auto&& c) {
+              on_way(local, std::forward<decltype(a)>(a),
+                     std::forward<decltype(b)>(b),
+                     std::forward<decltype(c)>(c));
             },
-            [&](auto&&... a) {
-              on_rel(local, std::forward<decltype(a)>(a)...);
+            [&](auto&& a, auto&& b, auto&& c) {
+              on_rel(local, std::forward<decltype(a)>(a),
+                     std::forward<decltype(b)>(b),
+                     std::forward<decltype(c)>(c));
             });
         on_flush(local);
       }

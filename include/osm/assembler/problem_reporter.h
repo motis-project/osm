@@ -28,8 +28,7 @@ struct problem_reporter {
                  << " location=" << location.x() << "," << location.y() << "\n";
   }
 
-  void report_touching_ring(object_id_type node_id,
-                            location location) {
+  void report_touching_ring(object_id_type node_id, location location) {
     if (!out_stream_) {
       return;
     }
@@ -60,8 +59,7 @@ struct problem_reporter {
                  << intersection.y() << "\n";
   }
 
-  void report_duplicate_segment(const node_ref& nr1,
-                                const node_ref& nr2) {
+  void report_duplicate_segment(const node_ref& nr1, const node_ref& nr2) {
     if (!out_stream_) {
       return;
     }
@@ -73,8 +71,7 @@ struct problem_reporter {
                  << nr2.location().y() << "\n";
   }
 
-  void report_overlapping_segment(const node_ref& nr1,
-                                  const node_ref& nr2) {
+  void report_overlapping_segment(const node_ref& nr1, const node_ref& nr2) {
     if (!out_stream_) {
       return;
     }
@@ -139,8 +136,7 @@ struct problem_reporter {
     *out_stream_ << "way_id=" << way.id << '\n';
   }
 
-  void report_invalid_location(object_id_type way_id,
-                               object_id_type node_id) {
+  void report_invalid_location(object_id_type way_id, object_id_type node_id) {
     if (!out_stream_) {
       return;
     }

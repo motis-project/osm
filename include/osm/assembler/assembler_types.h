@@ -62,9 +62,9 @@ struct node_ref_segment {
                    role_type role,
                    const way* way) noexcept
       : first_noderef_{location_less(nr1.location(), nr2.location()) ? nr1
-                                                                       : nr2},
+                                                                     : nr2},
         second_noderef_{location_less(nr1.location(), nr2.location()) ? nr2
-                                                                       : nr1},
+                                                                      : nr1},
         way_{way},
         role_{role} {}
 
@@ -711,9 +711,8 @@ struct area_pair {
     }
     auto const start = static_cast<std::size_t>(offsets[i + 1]);
     auto const end = static_cast<std::size_t>(
-        (i + 2 < offsets.size())
-            ? offsets[i + 2]
-            : static_cast<std::int64_t>(area_part.size()));
+        (i + 2 < offsets.size()) ? offsets[i + 2]
+                                 : static_cast<std::int64_t>(area_part.size()));
     return {area_part.data() + start, end - start};
   }
 

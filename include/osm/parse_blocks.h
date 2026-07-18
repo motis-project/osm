@@ -50,8 +50,13 @@ namespace osm {
 // `string_view`s handed to the primitive handlers point into the decoded
 // block and stay valid until (and including) `on_flush`, but not in
 // `collect` -- copy anything needed later into the `Context`.
-template <typename Context, typename NodeFn, typename WayFn, typename RelFn,
-          typename FlushFn, typename Collect, typename ProgressFn>
+template <typename Context,
+          typename NodeFn,
+          typename WayFn,
+          typename RelFn,
+          typename FlushFn,
+          typename Collect,
+          typename ProgressFn>
 void parse_osm_block_parallel_collect(std::vector<buf> const& blocks,
                                       NodeFn&& on_node,
                                       WayFn&& on_way,
@@ -77,12 +82,29 @@ void parse_osm_block_parallel_collect(std::vector<buf> const& blocks,
         local.decompressed_.resize(blocks[i].raw_size_);
         local.decompressor_.decompress(blocks[i].compressed_,
                                        local.decompressed_);
-        decode_primitive(
-            local.decompressed_, local.strings_, read_nodes, read_ways,
-            read_relations,
-            [&](auto&&... a) { on_node(ctx, std::forward<decltype(a)>(a)...); },
-            [&](auto&&... a) { on_way(ctx, std::forward<decltype(a)>(a)...); },
-            [&](auto&&... a) { on_rel(ctx, std::forward<decltype(a)>(a)...); });
+        // decode_primitive always calls the handlers with exactly three
+        // arguments (id, position/refs/members, tags). Spelling that fixed
+        // arity out -- rather than forwarding a variadic `auto&&...` pack --
+        // matters for compile time: MSVC instantiates variadic generic lambdas
+        // with pack-forwarding pathologically slowly, and these bridge lambdas
+        // are instantiated once per parse pass.
+        decode_primitive<read_nodes, read_ways, read_relations>(
+            local.decompressed_, local.strings_,
+            [&](auto&& a, auto&& b, auto&& c) {
+              on_node(ctx, std::forward<decltype(a)>(a),
+                      std::forward<decltype(b)>(b),
+                      std::forward<decltype(c)>(c));
+            },
+            [&](auto&& a, auto&& b, auto&& c) {
+              on_way(ctx, std::forward<decltype(a)>(a),
+                     std::forward<decltype(b)>(b),
+                     std::forward<decltype(c)>(c));
+            },
+            [&](auto&& a, auto&& b, auto&& c) {
+              on_rel(ctx, std::forward<decltype(a)>(a),
+                     std::forward<decltype(b)>(b),
+                     std::forward<decltype(c)>(c));
+            });
         on_flush(ctx);
         return ctx;
       },

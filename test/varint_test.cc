@@ -1,5 +1,5 @@
-#include <array>
 #include <cstdint>
+#include <array>
 #include <ranges>
 #include <string_view>
 #include <utility>
@@ -52,8 +52,8 @@ TEST(osm, varint_forward_iterator) {
   static_assert(std::forward_iterator<osm::varint<std::uint32_t>::iterator>);
   static_assert(std::ranges::forward_range<osm::varint<std::uint32_t>>);
 
-  auto const v =
-      osm::varint<std::uint32_t>{std::string_view{"\x01\x02\x03\x04\x05\x06", 6}};
+  auto const v = osm::varint<std::uint32_t>{
+      std::string_view{"\x01\x02\x03\x04\x05\x06", 6}};
 
   auto a = v.begin();
   auto b = a;
@@ -82,8 +82,8 @@ TEST(osm, varint_forward_iterator) {
 }
 
 TEST(osm, varint_chunk) {
-  auto const v =
-      osm::varint<std::uint32_t>{std::string_view{"\x01\x02\x03\x04\x05\x06", 6}};
+  auto const v = osm::varint<std::uint32_t>{
+      std::string_view{"\x01\x02\x03\x04\x05\x06", 6}};
 
   auto const pairs =
       v | std::views::chunk(2) | std::views::transform([](auto&& y) {

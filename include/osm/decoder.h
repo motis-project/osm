@@ -22,11 +22,11 @@ constexpr auto const kMaxStringLength = 256U * 4U;
 constexpr auto const kNanoDegree = 1'000'000'000.0;
 
 // Pass as `on_node` / `on_way` / `on_rel` to a parse driver to skip decoding
-// that primitive type. The driver detects this sentinel at compile time and
-// clears the corresponding `read_*` flag it hands to `decode_primitive`.
-struct skip {
-  void operator()(auto&&...) const noexcept {}
-};
+// that primitive type. The driver detects this sentinel at compile time
+// (`is_same_v`) and turns off the corresponding `Read*` template flag of
+// `decode_primitive`, so the skipped decoder -- and its handler -- is never
+// instantiated. `skip` is only ever used as a type; it has no call operator.
+struct skip {};
 
 struct meta_data {
   geo::latlng to_latlng(std::int64_t const lat, std::int64_t const lon) const {
@@ -40,7 +40,7 @@ struct meta_data {
 };
 
 inline void decode_string_table(std::string_view s,
-                         std::vector<std::string_view>& strings) {
+                                std::vector<std::string_view>& strings) {
   auto pbf_string_table = protozero::pbf_message<tag::string_table>{s};
   while (pbf_string_table.next(tag::string_table::kRepeatedBytesS,
                                protozero::pbf_wire_type::length_delimited)) {
@@ -129,7 +129,7 @@ void decode_dense_nodes(std::string_view s,
         varint<std::uint32_t>{separator_pos == std::string_view::npos
                                   ? std::string_view{}
                                   : tags.substr(0, separator_pos)} |
-        osm::chunk(2) | std::views::transform([&](auto&& y) {
+        std::views::chunk(2) | std::views::transform([&](auto&& y) {
           auto it = std::ranges::begin(y);
           auto const k = *it;
           auto const v = *++it;
@@ -288,23 +288,24 @@ void decode_relation(std::string_view s,
       zip(keys, values) | transform([&](auto&& x) {
         return std::tuple{strings.at(get<0>(x)), strings.at(get<1>(x))};
       });
-  auto const members =
-      zip(refs, roles, types) | transform([&](auto&& x) {
-        return std::tuple{get<0>(x), strings.at(get<1>(x)),
-                          static_cast<member_type>(get<2>(x))};
-      });
+  auto const members = zip(refs, roles, types) | transform([&](auto&& x) {
+                         return std::tuple{get<0>(x), strings.at(get<1>(x)),
+                                           static_cast<member_type>(get<2>(x))};
+                       });
   f(id, members, tags);
 }
 
-template <typename NodeFn, typename WayFn, typename RelFn>
+template <bool ReadNodes,
+          bool ReadWays,
+          bool ReadRelations,
+          typename NodeFn,
+          typename WayFn,
+          typename RelFn>
 void decode_primitive(std::string_view s,
                       std::vector<std::string_view>& strings,
-                      bool const read_nodes,
-                      bool const read_ways,
-                      bool const read_relations,
-                      NodeFn&& on_node,
-                      WayFn&& on_way,
-                      RelFn&& on_rel) {
+                      [[maybe_unused]] NodeFn&& on_node,
+                      [[maybe_unused]] WayFn&& on_way,
+                      [[maybe_unused]] RelFn&& on_rel) {
   strings.clear();
   auto const meta = decode_primitive_block_metadata(s, strings);
   auto pbf_primitive_block = protozero::pbf_message<tag::primitive_block>{s};
@@ -318,7 +319,7 @@ void decode_primitive(std::string_view s,
         case protozero::tag_and_type(
             tag::primitive_group::kRepeatedNodeNodes,
             protozero::pbf_wire_type::length_delimited):
-          if (read_nodes) {
+          if constexpr (ReadNodes) {
             decode_node(pbf_primitive_group.get_view(), meta, strings, on_node);
           } else {
             pbf_primitive_group.skip();
@@ -328,7 +329,7 @@ void decode_primitive(std::string_view s,
         case protozero::tag_and_type(
             tag::primitive_group::kOptionalDenseNodesDense,
             protozero::pbf_wire_type::length_delimited):
-          if (read_nodes) {
+          if constexpr (ReadNodes) {
             decode_dense_nodes(pbf_primitive_group.get_view(), strings, meta,
                                on_node);
           } else {
@@ -339,7 +340,7 @@ void decode_primitive(std::string_view s,
         case protozero::tag_and_type(
             tag::primitive_group::kRepeatedWayWays,
             protozero::pbf_wire_type::length_delimited):
-          if (read_ways) {
+          if constexpr (ReadWays) {
             decode_way(pbf_primitive_group.get_view(), strings, on_way);
           } else {
             pbf_primitive_group.skip();
@@ -349,7 +350,7 @@ void decode_primitive(std::string_view s,
         case protozero::tag_and_type(
             tag::primitive_group::kRepeatedRelationRelations,
             protozero::pbf_wire_type::length_delimited):
-          if (read_relations) {
+          if constexpr (ReadRelations) {
             decode_relation(pbf_primitive_group.get_view(), strings, on_rel);
           } else {
             pbf_primitive_group.skip();

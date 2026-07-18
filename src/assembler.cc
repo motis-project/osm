@@ -1,7 +1,7 @@
 #include "osm/assembler.h"
 
-#include <algorithm>
 #include <cassert>
+#include <algorithm>
 #include <iostream>
 #include <iterator>
 #include <list>
@@ -21,11 +21,11 @@
 
 // dbg macro (used only by this TU; include after the headers so callers
 // of assembler.h don't see it)
-#define dbg(...)                              \
-  do {                                        \
-    if (state_.debug) {                       \
-      fmt::println(std::cerr, __VA_ARGS__);   \
-    }                                         \
+#define dbg(...)                            \
+  do {                                      \
+    if (state_.debug) {                     \
+      fmt::println(std::cerr, __VA_ARGS__); \
+    }                                       \
   } while (0)
 
 namespace osm {
@@ -121,8 +121,7 @@ bool assembly::try_to_merge(open_ring_its_type& open_ring_its) {
   if (open_ring_its.empty()) {
     return false;
   }
-  dbg("    Trying to merge {} open rings (try_to_merge)",
-      open_ring_its.size());
+  dbg("    Trying to merge {} open rings (try_to_merge)", open_ring_its.size());
 
   auto const xrings = create_location_to_ring_map(open_ring_its);
   auto it = xrings.cbegin();
@@ -361,8 +360,9 @@ static void find_candidates(std::vector<candidate>& candidates,
         }
         loc_done.push_back(c.stop_location);
         find_candidates(candidates, loc_done, xrings, c, depth + 1, debug);
-        utl::verify(!loc_done.empty() && loc_done.back() == c.stop_location,
-                    "find_candidates: loc_done stack corrupted after recursion");
+        utl::verify(
+            !loc_done.empty() && loc_done.back() == c.stop_location,
+            "find_candidates: loc_done stack corrupted after recursion");
         loc_done.pop_back();
         if (debug) {
           std::cerr << "          ...back\n";
@@ -776,13 +776,12 @@ bool assembly::create_rings() {
       count_segments_for_debug++;
       assert(segment->way());
       if (!segment->role_empty() &&
-          (ring.is_outer() ? !segment->role_outer()
-                           : !segment->role_inner())) {
+          (ring.is_outer() ? !segment->role_outer() : !segment->role_inner())) {
         ++state_.stats.wrong_role;
         dbg(" Segment: {} from way {} has role '{}', but should have role "
             "'{}'\n ",
-            count_segments_for_debug, segment->way()->id,
-            segment->role_name(), ring.is_outer() ? "outer" : "inner");
+            count_segments_for_debug, segment->way()->id, segment->role_name(),
+            ring.is_outer() ? "outer" : "inner");
         if (ring.is_outer()) {
           state_.problem_reporter.report_role_should_be_outer(
               segment->way()->id, segment->first().location(),

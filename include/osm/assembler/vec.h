@@ -9,8 +9,7 @@ namespace osm {
 
 struct vec {
   constexpr vec(std::int64_t a, std::int64_t b) noexcept : x{a}, y{b} {}
-  constexpr explicit vec(const location& l) noexcept
-      : x{l.x()}, y{l.y()} {}
+  constexpr explicit vec(const location& l) noexcept : x{l.x()}, y{l.y()} {}
   constexpr explicit vec(const node_ref& nr) noexcept
       : x{nr.location().x()}, y{nr.location().y()} {}
 

@@ -4,10 +4,10 @@
 #include <sys/mman.h>
 #include <unistd.h>
 #endif
-#include <algorithm>
-#include <array>
 #include <cstdint>
 #include <cstring>
+#include <algorithm>
+#include <array>
 #include <iterator>
 #include <limits>
 #include <string>
@@ -48,7 +48,8 @@ namespace osm {
 
 struct id_offset {
   id_offset() = default;
-  id_offset(osm::object_id_type const id, std::uint64_t const block_offset,
+  id_offset(osm::object_id_type const id,
+            std::uint64_t const block_offset,
             std::uint32_t const in_block_offset)
       : id_{id},
         block_offset_{block_offset},
@@ -216,8 +217,7 @@ void get_coords(
         if (it_idx == std::end(idx) || it_idx->id_ != query_id) {
           --it_idx;
         }
-        if (block_exhausted &&
-            it_idx->block_offset_ == last_block_offset) {
+        if (block_exhausted && it_idx->block_offset_ == last_block_offset) {
           ++q_it;
           break;
         }
@@ -316,7 +316,8 @@ void update_locations_of_way(hybrid_node_idx const& nodes, osm::way& way) {
   // Reused per thread: this is called once per way (millions of times) and the
   // vector is pure scratch (pointers into `way`'s own nodes), so there is no
   // reason to re-allocate it every time.
-  static thread_local std::vector<std::pair<osm::object_id_type, osm::location*>>
+  static thread_local std::vector<
+      std::pair<osm::object_id_type, osm::location*>>
       query;
   query.clear();
   query.reserve(way.nodes().size());
@@ -334,7 +335,8 @@ void update_locations_of_way(hybrid_node_idx const& nodes, osm::way& way) {
 }
 
 void update_locations(hybrid_node_idx const& nodes, std::span<osm::way> ways) {
-  static thread_local std::vector<std::pair<osm::object_id_type, osm::location*>>
+  static thread_local std::vector<
+      std::pair<osm::object_id_type, osm::location*>>
       query;
   query.clear();
   for (auto& w : ways) {
@@ -490,9 +492,9 @@ struct hybrid_block_merger::impl {
       auto const cum_coords = global_coords_written_ + ss.coords_before_;
       if (first_in_block || idx_.empty() ||
           cum_coords - last_idx_coord_ >= kCoordsPerIndex) {
-        idx_.push_back(id_offset{
-            ss.start_id_, block_offset,
-            static_cast<std::uint32_t>(ss.offset_in_encoded_)});
+        idx_.push_back(
+            id_offset{ss.start_id_, block_offset,
+                      static_cast<std::uint32_t>(ss.offset_in_encoded_)});
         last_idx_coord_ = cum_coords;
         first_in_block = false;
       }
