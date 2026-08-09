@@ -1,6 +1,8 @@
 #pragma once
 
+#include <cstddef>
 #include <atomic>
+#include <memory>
 #include <mutex>
 #include <optional>
 #include <string>
@@ -10,6 +12,7 @@
 #include <vector>
 
 #include "boost/fiber/all.hpp"
+#include "boost/fiber/protected_fixedsize_stack.hpp"
 
 #include "utl/parser/buf_reader.h"
 
@@ -82,11 +85,14 @@ void parse_osm(raw_reader& r,
   auto fin_cv = bf::condition_variable_any{};
   auto fin_mutex = std::mutex{};
 
+  static constexpr auto kFiberStackSize = std::size_t{8U * 1024U * 1024U};
+  auto stack_allocator = bf::protected_fixedsize_stack{kFiberStackSize};
+
   auto ch = bf::buffered_channel<buf>{64U};
   auto fibers = std::vector<bf::fiber>{};
   fibers.reserve(fiber_count);
   for (auto i = 0U; i != fiber_count; ++i) {
-    fibers.emplace_back([&]() {
+    fibers.emplace_back(std::allocator_arg, stack_allocator, [&]() {
       auto local = make_local();
       auto decompressor = inflate{};
       auto out = std::string{};
