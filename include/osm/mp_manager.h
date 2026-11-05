@@ -1,6 +1,7 @@
 #pragma once
 
 #include <algorithm>
+#include <iostream>
 #include <mutex>
 #include <optional>
 #include <string_view>
@@ -83,8 +84,11 @@ inline bool is_way_area(Tags&& tags) {
 }
 
 struct polygon_manager {
-  explicit polygon_manager(bool assemble_way_polygons = false)
-      : assemble_way_polygons_{assemble_way_polygons} {}
+  // debug: keep node ids of relation member ways and enable the assembler's
+  // problem reports and debug output (to std::cerr).
+  explicit polygon_manager(bool assemble_way_polygons = false,
+                           bool debug = false)
+      : assemble_way_polygons_{assemble_way_polygons}, debug_{debug} {}
 
   template <typename Members, typename Tags>
   void save_ways_of_relation(std::int64_t const id,
@@ -136,19 +140,29 @@ struct polygon_manager {
     if (assemble_way_polygons_) {  // && is_way_area(tags)) {
       auto a = polygon_area{way.id};
       a.from_way = true;
-      auto assemble = assembly{};
+      auto assemble = make_assembly();
       if (assemble.assembling_area_from_way(way, a)) {
         result = a;
       }
     }
 
-    // Only ways referenced by an area are used assemble_area.
+    // Only ways referenced by an area are used assemble_area. The assembler
+    // compares locations only, so node ids are stored in debug mode only.
     if (!members_indexed_ || is_relation_member(way.id)) {
       auto lock = std::lock_guard{ways_vec_mtx_};
       auto const idx =
           way_idx_t{static_cast<cista::base_t<way_idx_t>>(way_to_id_.size())};
       way_to_id_.emplace_back(way.id);
-      way_node_refs_.emplace_back(std::move(way.node_refs));
+      auto locations = way_locations_.add_back_sized(way.node_refs.size());
+      for (auto i = 0U; i != way.node_refs.size(); ++i) {
+        locations[i] = way.node_refs[i].location();
+      }
+      if (debug_) {
+        auto ids = way_node_ids_.add_back_sized(way.node_refs.size());
+        for (auto i = 0U; i != way.node_refs.size(); ++i) {
+          ids[i] = way.node_refs[i].ref();
+        }
+      }
       osm_id_to_way_[way.id] = idx;
     }
 
@@ -164,13 +178,12 @@ struct polygon_manager {
       return a;
     }
 
-    auto assemble = assembly{};
+    auto assemble = make_assembly();
     auto r = relation{id, members};
 
     // Materialize temporary `way`s for each member so the assembler (which
-    // takes `std::vector<way const*>`) sees stable pointers. The actual
-    // node-ref storage lives in `way_node_refs_`; we copy a slice per used
-    // way for the duration of this call.
+    // takes `std::vector<way const*>`) sees stable pointers. Node ids are 0
+    // unless `debug_` keeps them in `way_node_ids_`.
     auto ways_storage = std::vector<way>{};
     auto ways = std::vector<way const*>{};
     if (auto const mit = mp_index_.find(id); mit != mp_index_.end()) {
@@ -182,10 +195,14 @@ struct polygon_manager {
           continue;
         }
         auto const w_idx = it->second;
-        auto const bucket = way_node_refs_[w_idx];
-        ways_storage.push_back(
-            way{way_to_id_[w_idx],
-                std::vector<node_ref>(bucket.begin(), bucket.end())});
+        auto const locations = way_locations_[w_idx];
+        auto refs = std::vector<node_ref>{};
+        refs.reserve(locations.size());
+        for (auto i = 0U; i != locations.size(); ++i) {
+          refs.push_back(
+              node_ref{debug_ ? way_node_ids_[w_idx][i] : 0, locations[i]});
+        }
+        ways_storage.push_back(way{way_to_id_[w_idx], std::move(refs)});
       }
       ways.reserve(ways_storage.size());
       for (auto const& w : ways_storage) {
@@ -201,15 +218,21 @@ struct polygon_manager {
     return a;
   }
 
+  assembly make_assembly() const {
+    return debug_ ? assembly{&std::cerr, true} : assembly{};
+  }
+
   area_stats all_stats_{};
   bool assemble_way_polygons_{false};
+  bool debug_{false};
 
   std::mutex mp_vec_mtx_;
   std::vector<multi_polygon> mp_vec_{};
   hash_map<object_id_type, std::size_t> mp_index_{};  // relation id -> mp_vec_
 
   std::mutex ways_vec_mtx_;
-  vecvec<way_idx_t, node_ref> way_node_refs_{};
+  vecvec<way_idx_t, location> way_locations_{};
+  vecvec<way_idx_t, object_id_type> way_node_ids_{};  // debug only
   vector_map<way_idx_t, object_id_type> way_to_id_{};
   hash_map<object_id_type, way_idx_t> osm_id_to_way_{};
   std::atomic_uint64_t count_non_areas_{0};
