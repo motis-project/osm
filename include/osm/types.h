@@ -5,6 +5,7 @@
 
 #include "ankerl/cista_adapter.h"
 
+#include "cista/containers/anon_vec.h"
 #include "cista/containers/vector.h"
 #include "cista/containers/vecvec.h"
 #include "cista/strong.h"
@@ -26,6 +27,10 @@ using vector_map = cista::raw::vector_map<K, V>;
 
 template <typename K, typename V, typename SizeType = cista::base_t<K>>
 using vecvec = cista::raw::vecvec<K, V, SizeType>;
+
+template <typename K, typename V, typename SizeType = cista::base_t<K>>
+using anon_vecvec =
+    cista::basic_vecvec<K, cista::anon_vec<V>, cista::raw::vector<SizeType>>;
 
 template <typename K, typename V>
 using hash_map = cista::raw::ankerl_map<K, V>;
