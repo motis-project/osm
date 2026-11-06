@@ -220,7 +220,7 @@ struct polygon_manager {
   }
 
   assembly make_assembly() const {
-    return debug_ ? assembly{&std::cerr, true} : assembly{};
+    return assembly{debug_ ? &std::cerr : nullptr, debug_};
   }
 
   area_stats all_stats_{};
