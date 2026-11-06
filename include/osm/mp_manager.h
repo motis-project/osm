@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <iostream>
+#include <limits>
 #include <mutex>
 #include <optional>
 #include <string_view>
@@ -231,7 +232,13 @@ struct polygon_manager {
   hash_map<object_id_type, std::size_t> mp_index_{};  // relation id -> mp_vec_
 
   std::mutex ways_vec_mtx_;
-  vecvec<way_idx_t, location> way_locations_{};
+  // Grows in place: no copy and no unused doubling capacity in RAM. Reserves
+  // address space for as many locations as its uint32 offsets can address.
+  static constexpr auto kMaxMemberNodes =
+      std::size_t{std::numeric_limits<cista::base_t<way_idx_t>>::max()};
+  anon_vecvec<way_idx_t, location> way_locations_{
+      .data_ = cista::anon_vec<location>{kMaxMemberNodes * sizeof(location)},
+      .bucket_starts_ = {}};
   vecvec<way_idx_t, object_id_type> way_node_ids_{};  // debug only
   vector_map<way_idx_t, object_id_type> way_to_id_{};
   hash_map<object_id_type, way_idx_t> osm_id_to_way_{};
